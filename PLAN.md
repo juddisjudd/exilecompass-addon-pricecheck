@@ -525,8 +525,8 @@ src/
     format.ts         compact amounts: 0.003, 2.5, 371, 1.5k, 1.2m
     item.ts           compact item header + property chips (never the raw text)
     filters.ts        checkbox + min/max row per matched stat
-    results.ts        sortable listings table; price right, item behind the icon
-    listing-item.ts   a listing's full item: mods with affix, tier and range
+    results.ts        listing cards: the item, its price, seller and age
+    listing-item.ts   a listing's item: mods badged P#/S#, with roll ranges
 test/
   parser.test.ts      fixtures for rare/plain/weapon/currency/negative rolls
   currency.test.ts    amount formatting, icon lookup, rate conversion
@@ -614,51 +614,51 @@ below 5 exalted. So:
   search asks the API for, and decides which listings come back at all;
 - clicking **Price** flips that order and re-runs the search — one click, one
   search, through the limiter;
-- clicking **Listed**, **ilvl**, **Stock** or **Seller** reorders the fetched
+- clicking **Listed** or **ilvl** reorders the fetched
   page locally, with no API call.
 
 
 
-**Row layout.** Price is the last column, right-aligned: a price list is read
-from its right edge, and how long a listing has been up sits immediately left of
-it. The seller is a fixed narrow column rather than the row's flexible one —
-worth seeing, not worth a quarter of the row.
+**Two panes, not one column.** The item and its filters sit on the left, the
+listings on the right — Sidekick's `LayoutTwoColumn` (`ItemOverlay.razor`).
+Stacked in one column, as this was, the filters and the item pushed the prices
+off the bottom of the panel, and collapsing them on a successful search only
+traded one problem for another. They are read together, so they sit side by
+side. Search anchors the bottom of the filter column, under everything it acts
+on. Below 720px the panes stack, because at that width a 312px sidebar is most
+of the screen.
 
+**Each listing is a card, not a table row.** This went through a table first —
+including a spell as two mismatched CSS grids, which is what made the columns
+drift — and a table is the wrong shape for the content. Half of what matters
+about a listing is its mods, and mods do not fit in a cell: they were truncated
+to one ellipsised line, with the real item hidden behind an expander. Sidekick
+renders each listing as the item itself with price, seller and age beside it
+(`Trade/Items/ItemComponent.razor`), and that is what a price check compares.
+So: the item on the left of the card, always visible, and what it costs on the
+right.
 
-**The listings are a real `<table>`**, fixed-layout, with a `<colgroup>` setting
-each column's width. They were CSS grid first, with the header and the rows as
-two separate grid containers sharing a `grid-template-columns` string — which
-does not work: each container resolves its own `auto` and `minmax` tracks
-against its own content, so a long mod line in one row widened that row's
-columns and nothing lined up with the header. One table means one layout
-algorithm for header and body together, and `table-layout: fixed` means content
-can never push a column around. The expanded item is a `<tr>` with a
-`colSpan`ned cell, so it inherits the same alignment.
+Affix tiers are badged in the margin — `P7` red, `S3` blue — exactly as
+`ItemStatLineComponent.razor` does it. The tier is the fastest read on a rare,
+and in a fixed gutter the badges line up into a scannable column. (The badge
+class is `pc-affix`, not `pc-tier`: the filter list already uses `pc-tier` for
+the *player's own* item's mod tiers, and the two are different things.)
 
-Sorting lives on a button that fills its header cell, with `aria-sort` on the
-`<th>`. The panel-wide `.pc button` rule has to be out-specified for it
-(`.pc .pc-sort`) — without that, the sort controls inherit the input chrome and
-the header reads as a row of text boxes rather than column labels.
+Sorting has no column headers to hang off any more, so it is three buttons
+above the list: Price re-runs the search (the server owns currency order),
+Listed and ilvl reorder the fetched page locally.
 
 **There is no whisper button.** PoE2's in-game asynchronous trade offers are how
 people buy now, so a copied whisper is a step almost nobody takes. Removing it
 also removed the panel's only reason to touch the clipboard, and with it the
 `document.execCommand` fallback the sandbox's opaque origin forced on us.
 
-**The full item is behind the row's icon.** Sidekick renders every listing as a
-complete item card with a compact-mode toggle to escape it
-(`Trade/Items/ItemComponent.razor`); EE2 never shows the item at all. Neither
-extreme is right — a page of item cards stops being a price comparison, but you
-do need to see what you are comparing against. So the icon is a button, and it
-expands one listing in place: name, base, requirements, and every mod with its
-affix name, tier and roll range, implicits marked apart from explicits.
-
-Two details of the fetch payload make this possible and are easy to get wrong.
-`explicitMods` and friends are **objects, not strings** — `{description, mods:
-[{name, tier, magnitudes}]}` — which is where the affix and tier come from. And
-`description` carries PoE's own link markup (`[ElementalDamage|Elemental]`,
-`[Resistances]`), which reads as wiki source until it is unwrapped: `[a|b]`
-takes the second half, `[a]` the first.
+Two details of the fetch payload make the card possible and are easy to get
+wrong. `explicitMods` and friends are **objects, not strings** — `{description,
+mods: [{name, tier, magnitudes}]}` — which is where the affix and tier come
+from. And `description` carries PoE's own link markup
+(`[ElementalDamage|Elemental]`, `[Resistances]`), which reads as wiki source
+until it is unwrapped: `[a|b]` takes the second half, `[a]` the first.
 
 **Currency is shown as an icon, not a word.** `/data/static` publishes a name
 and image for every currency, keyed by exactly the id a listing's

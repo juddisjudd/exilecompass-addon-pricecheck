@@ -21,8 +21,8 @@ off the response, neither of which older hosts can do.
   currency — exalted or chaos — alongside the seller's asking price. Anything
   worth a divine or more is quoted in divines automatically. Rates come from
   poe.ninja; without them prices simply stay as listed.
-- Press a listing's icon to see the whole item — every mod with its affix name,
-  tier and roll range, implicits marked apart from explicits.
+- Every listing shows the item itself — mods badged by affix tier (P7, S3) with
+  their roll ranges — alongside its price, seller and age.
 - Softcore or hardcore, always the current challenge league — resolved from
   the API, never hardcoded.
 - Obeys GGG's published rate limits. Breaking them bans your IP from trade for

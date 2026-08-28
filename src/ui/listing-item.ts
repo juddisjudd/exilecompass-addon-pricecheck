@@ -17,14 +17,6 @@ function lineText(line: ListingLine): string {
   return values.length ? `${line.name}: ${values.join(', ')}` : line.name;
 }
 
-/** `P7` is prefix tier 7, `S5` suffix tier 5 — the trade site's own shorthand. */
-function affixLabel(mod: ListingMod): string | null {
-  const detail = mod.mods?.[0];
-  if (!detail) return null;
-  const parts = [detail.name, detail.tier].filter(Boolean);
-  return parts.length ? parts.join(' ') : null;
-}
-
 /** `39–51`, the range this roll came out of. */
 function rangeLabel(mod: ListingMod): string | null {
   const magnitudes = mod.mods?.[0]?.magnitudes ?? [];
@@ -34,18 +26,33 @@ function rangeLabel(mod: ListingMod): string | null {
   return ranges.length ? ranges.join(', ') : null;
 }
 
+/**
+ * Sidekick puts the affix tier in the margin beside its mod — `P1` for a
+ * prefix, `S2` for a suffix, coloured apart
+ * (`Trade/Items/ItemStatLineComponent.razor`). It reads far faster than a name
+ * and a tier trailing off the end of the line, and it lines the tiers up into
+ * a column you can scan.
+ */
+function tierBadge(mod: ListingMod): HTMLElement {
+  const detail = mod.mods?.[0];
+  const tier = detail?.tier;
+  if (!tier) return el('span', 'pc-affix empty');
+
+  const prefix = tier.toUpperCase().startsWith('P');
+  const badge = el('span', `pc-affix ${prefix ? 'prefix' : 'suffix'}`, tier);
+  badge.title = detail?.name
+    ? `${prefix ? 'Prefix' : 'Suffix'} — ${detail.name}`
+    : prefix
+      ? 'Prefix'
+      : 'Suffix';
+  return badge;
+}
+
 function modRow(mod: ListingMod, kind: string): HTMLElement {
   const row = el('div', `pc-mod ${kind}`);
-  row.append(el('span', 'pc-mod-text', cleanDescription(mod.description ?? '')));
-
-  const affix = affixLabel(mod);
+  row.append(tierBadge(mod), el('span', 'pc-mod-text', cleanDescription(mod.description ?? '')));
   const range = rangeLabel(mod);
-  if (affix || range) {
-    const meta = el('span', 'pc-mod-meta');
-    if (affix) meta.append(el('span', 'pc-mod-affix', affix));
-    if (range) meta.append(el('span', 'pc-mod-range', range));
-    row.append(meta);
-  }
+  if (range) row.append(el('span', 'pc-mod-range', range));
   return row;
 }
 
@@ -58,9 +65,9 @@ const RARITY_CLASS: Record<string, string> = {
 /**
  * The whole item, the way the game shows it: name and base, then properties,
  * requirements, and every mod with its affix, tier and roll range. Sidekick
- * renders the same thing per listing (`Trade/Items/ItemComponent.razor`); here
- * it is behind the row's icon rather than always on, because a page of full
- * item cards stops being a price comparison.
+ * renders the same thing per listing (`Trade/Items/ItemComponent.razor`), and
+ * so does the card here: what you are comparing prices against is the item,
+ * so it should not be hidden behind a control.
  */
 export function renderListingItem(container: HTMLElement, listing: Listing): void {
   const item = listing.item;
@@ -95,20 +102,5 @@ export function renderListingItem(container: HTMLElement, listing: Listing): voi
     container.append(block);
   }
 
-  if (listing.stash?.name) {
-    container.append(el('div', 'pc-detail-facts', `Stash: ${listing.stash.name}`));
-  }
 }
 
-/**
- * One line standing in for the item in the results row. A rare's random name
- * says nothing, so its mods do the talking; everything else is known by name.
- */
-export function listingSummary(listing: Listing): string {
-  const item = listing.item;
-  const mods = item.explicitMods ?? [];
-  if (item.rarity === 'Rare' && mods.length) {
-    return mods.map((mod) => cleanDescription(mod.description ?? '')).join(', ');
-  }
-  return item.name || item.typeLine || item.baseType || '';
-}

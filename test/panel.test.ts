@@ -131,139 +131,81 @@ const box = $('.pc-filter input[type=checkbox]') as HTMLInputElement;
 box.checked = true;
 box.dispatchEvent(new win.Event('change', { bubbles: true }));
 
-click($$('.pc-primary')[0]);
+click($('.pc-search') as HTMLElement);
 await settle(200);
 
 check('one search ran', searchCount === 1, `count=${searchCount}`);
 check('default order is cheapest first', lastSort === '{"price":"asc"}', lastSort);
-check('null listings are dropped', $$('.pc-tr').length === 3, `${$$('.pc-tr').length} rows`);
-check('filters collapse once there are prices', !shown('.pc-filter-list'));
-check('total is reported', /78 listings/.test(text()), text().slice(-160));
+check('null listings are dropped', $$('.pc-card').length === 3, `${$$('.pc-card').length} cards`);
+check('total is reported', /Showing 3 of 78/.test(text()), text().slice(0, 300));
 
-// Price reads from the right edge, with how long it has been listed beside it.
-const heads = headings().filter(Boolean);
-check('price is the last column', heads[heads.length - 1].startsWith('Price'), heads.join('|'));
-check('listed sits just left of it', heads[heads.length - 2] === 'Listed', heads.join('|'));
-check('seller column', heads.includes('Seller'), heads.join('|'));
-check('an item column stands in for the row', heads.includes('Item'), heads.join('|'));
-check('ilvl column shown for gear', heads.includes('ilvl'), heads.join('|'));
-check('no stock column for a ring', !heads.includes('Stock'), heads.join('|'));
-check('the whisper button is gone', $$('.pc-copy').length === 0, `${$$('.pc-copy').length}`);
-// A rare's random name says nothing, so its mods stand in for it.
-check(
-  'the summary shows the mods',
-  /\+43 to Evasion Rating/.test(String($('td.summary')?.textContent)),
-  String($('td.summary')?.textContent),
-);
-check(
-  'with the link markup unwrapped',
-  !/[[\]|]/.test(String($('td.summary')?.textContent)),
-  String($('td.summary')?.textContent),
-);
+// ── the layout is two panes ─────────────────────────────────────────────────
+// Stacked, the filters pushed the listings off the bottom. Item and filters
+// live on the left now, listings on the right, as Sidekick lays it out.
+check('there are two panes', !!$('.pc-panes'), 'no pane container');
+check('the item and filters are in the side pane', !!$('.pc-side .pc-item') && !!$('.pc-side .pc-filters'));
+check('the listings are not', !$('.pc-side .pc-card'), 'listings ended up in the side pane');
+check('search sits under the filters it acts on', !!$('.pc-side .pc-search'));
+check('the filters stay open alongside results', shown('.pc-filter-list'));
 
+// ── each listing is a card showing the item ─────────────────────────────────
+const firstCard = $('.pc-card') as HTMLElement;
+const cardText = () => String(firstCard.textContent).replace(/\s+/g, ' ');
+check('the item is named', /Dusk Turn/.test(cardText()), cardText());
+check('with its base and level', /Prismatic Ring/.test(cardText()) && /Level: 39/.test(cardText()), cardText());
+check('the implicit is shown', /\+10% to all Elemental Resistances/.test(cardText()), cardText());
+check('and every explicit', /\+43 to Evasion Rating/.test(cardText()) && /\+82 to maximum Life/.test(cardText()), cardText());
+check('no leftover link markup', !/[[\]|]/.test(cardText()), cardText());
+check('no expansion needed to see it', $$('.pc-item-btn').length === 0, 'still behind a control');
 
-// ── it is a real table ──────────────────────────────────────────────────────
-// The header and the rows used to be separate CSS grids, each sizing its own
-// `auto` tracks, so the columns drifted apart. One table, one layout.
-const table = $('.pc-table') as HTMLTableElement | null;
-check('the listings are a table element', table?.tagName === 'TABLE', String(table?.tagName));
-check('with a colgroup fixing the widths', !!$('.pc-table colgroup'), 'no colgroup');
-const headerCells = $$('.pc-table thead th');
-const firstRowCells = [...($('.pc-table tbody tr.pc-tr')?.children ?? [])];
-check(
-  'header and body have the same number of columns',
-  headerCells.length === firstRowCells.length,
-  `${headerCells.length} vs ${firstRowCells.length}`,
-);
-check('column widths are declared once', $$('.pc-table col').length === headerCells.length);
-check('header cells are scoped for a screen reader', headerCells.every((c) => c.getAttribute('scope') === 'col'));
-check(
-  'the sorted column is announced',
-  $$('.pc-table th[aria-sort="ascending"], .pc-table th[aria-sort="descending"]').length >= 1,
-  'no aria-sort set',
-);
-check(
-  'unsorted columns say so too',
-  $$('.pc-table th[aria-sort="none"]').length >= 1,
-  'no aria-sort=none',
-);
+// Sidekick puts the affix tier in the margin, prefixes and suffixes coloured
+// apart. Ours reads the same P#/S# shorthand straight off the payload.
+const tiers = $$('.pc-card .pc-affix').filter((n) => String(n.textContent).trim());
+check('affix tiers are badged', tiers.map((n) => n.textContent).join(',') === 'P7,P3', tiers.map((n) => n.textContent).join(','));
+check('prefixes are marked as prefixes', tiers.every((n) => n.className.includes('prefix')), tiers.map((n) => n.className).join('|'));
+check('roll ranges are shown', /39–51/.test(cardText()) && /70–84/.test(cardText()), cardText());
 
+// Price, seller and age sit together on the card's right.
+check('the price is on the card', !!$('.pc-card .pc-price'), 'no price');
+check('so is the seller', /AfkAlchemist/.test(cardText()), cardText());
+check('and how long it has been listed', /20h/.test(cardText()), cardText());
 const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
 check('afk seller shows as afk', dots[0] === 'afk', dots.join(','));
 check('online seller shows as online', dots[1] === 'online', dots.join(','));
 check('missing online key means offline', dots[2] === 'offline', dots.join(','));
 
+// ── sorting, without columns to click ───────────────────────────────────────
+const cardNames = () => $$('.pc-card .pc-item-name').map((n) => String(n.textContent).trim());
+check('starts in the order the server returned', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre', cardNames().join(','));
 
-// ── the full item, behind the icon ──────────────────────────────────────────
-check('nothing is expanded to begin with', $$('.pc-detail-row').length === 0);
-const itemButtons = $$('.pc-item-btn');
-check('every row has an item button', itemButtons.length === 3, `${itemButtons.length}`);
-check('collapsed rows say so', itemButtons[0].getAttribute('aria-expanded') === 'false');
-
-const searchesBeforeExpand = searchCount;
-click(itemButtons[0]);
-await settle(80);
-
-const detail = $('.pc-detail-row');
-check('pressing it opens the item', !!detail, 'no detail panel');
-check('opening costs no API call', searchCount === searchesBeforeExpand, `count=${searchCount}`);
-check('and marks the button expanded', $$('.pc-item-btn')[0].getAttribute('aria-expanded') === 'true');
-
-const detailText = () => String($('.pc-detail-row')?.textContent ?? '').replace(/\s+/g, ' ');
-check('names the item', /Dusk Turn/.test(detailText()), detailText());
-check('shows its level requirement', /Level: 39/.test(detailText()), detailText());
-check('shows the implicit', /\+10% to all Elemental Resistances/.test(detailText()), detailText());
-check('shows every explicit', /\+43 to Evasion Rating/.test(detailText()) && /\+82 to maximum Life/.test(detailText()), detailText());
-check('with the affix name and tier', /Acrobat's P7/.test(detailText()), detailText());
-check('and the roll range it came from', /39–51/.test(detailText()), detailText());
-check('no leftover link markup', !/[[\]|]/.test(detailText()), detailText());
-check(
-  'implicits are marked apart from explicits',
-  $$('.pc-mod.implicit').length === 1 && $$('.pc-mod.explicit').length === 2,
-  `${$$('.pc-mod.implicit').length}/${$$('.pc-mod.explicit').length}`,
-);
-
-// A second row opens independently of the first.
-click($$('.pc-item-btn')[1]);
-await settle(80);
-check('rows expand independently', $$('.pc-detail-row').length === 2, `${$$('.pc-detail-row').length}`);
-
-click($$('.pc-item-btn')[0]);
-await settle(80);
-check('and close again', $$('.pc-detail-row').length === 1, `${$$('.pc-detail-row').length}`);
-
-// Local sort: ilvl ascending, then descending, with no API call either way.
-const ilvls = () => $$('td.right:not(.listed):not(.price)').map((n) => String(n.textContent).trim());
+const searchesBeforeSort = searchCount;
 click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
 await settle();
-check('ilvl sorts ascending', ilvls().join(',') === '47,65,81', ilvls().join(','));
+check('ilvl sorts ascending', cardNames().join(',') === 'Dusk Turn,Rift Gyre,Blood Band', cardNames().join(','));
 click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
 await settle();
-check('clicking again reverses it', ilvls().join(',') === '81,65,47', ilvls().join(','));
-check('caret marks the sorted column', /ilvl\s*↓/.test(text()));
-check('local sorting costs no API call', searchCount === 1, `count=${searchCount}`);
+check('clicking again reverses it', cardNames().join(',') === 'Blood Band,Rift Gyre,Dusk Turn', cardNames().join(','));
+check('the active sort is marked', /ilvl\s*↓/.test(text()));
+check('local sorting costs no API call', searchCount === searchesBeforeSort, `count=${searchCount}`);
 
-// Price order belongs to the server, so it re-runs the search.
+// Price order belongs to the server, so choosing it re-runs the search.
 click($$('.pc-sort').find((n) => String(n.textContent).startsWith('Price')));
 await settle(200);
 check('price sort re-runs the search', searchCount === 2, `count=${searchCount}`);
-check('and flips to descending', lastSort === '{"price":"desc"}', lastSort);
+check('and returns to the server order', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre', cardNames().join(','));
 
 // ── currency images and conversion ──────────────────────────────────────────
-
-
-
-check('every price cell shows an icon, not a word', $$('.pc-cur').length === 3, `${$$('.pc-cur').length}`);
+check('every price shows an icon, not a word', $$('.pc-cur').length === 3, `${$$('.pc-cur').length}`);
 check(
-  'no currency name in the cell text',
-  !$$('td.price').some((n) => /exalted/i.test(String(n.textContent))),
-  $$('td.price').map((n) => n.textContent).join('/'),
+  'no currency name in the price text',
+  !$$('.pc-price').some((n) => /exalted/i.test(String(n.textContent))),
+  $$('.pc-price').map((n) => n.textContent).join('/'),
 );
 check('icons went through the host cache', iconRequests.some((u) => u.includes('exalted')), iconRequests.join(','));
 check(
-  'the currency name is in the tooltip',
-  ($('td.price') as HTMLElement).title.includes('Exalted Orb'),
-  ($('td.price') as HTMLElement).title,
+  'the currency name is on the icon',
+  ($('.pc-cur') as HTMLImageElement).title.includes('Exalted Orb'),
+  ($('.pc-cur') as HTMLImageElement).title,
 );
 const amounts = () => $$('.pc-amount').map((n) => String(n.textContent).trim());
 check(
@@ -292,8 +234,10 @@ await settle(120);
 
 check('switching core costs no API call', searchCount === searchesBefore, `count=${searchCount}`);
 check('every listing now carries a conversion', norms().length === 3, norms().join(' '));
-check('shown in parentheses', norms().every((t) => t.startsWith('(') && t.endsWith(')')), norms().join(' '));
-check('restated in chaos', norms().every((t) => t.endsWith('c)')), norms().join(' '));
+// On its own line under the price now, so it needs no parentheses to be
+// told apart from the asking price.
+check('shown under the asking price', norms().every((t) => /^[0-9.]+ [a-z]+$/.test(t)), norms().join(' '));
+check('restated in chaos', norms().every((t) => t.endsWith(' c')), norms().join(' '));
 // 1 exalted is 0.0288 chaos here; it must not collapse to "0".
 check('sub-unit conversions keep precision', norms().some((t) => /0\.0/.test(t)), norms().join(' '));
 check('never a raw float', !norms().some((t) => /\.\d{3,}/.test(t)), norms().join(' '));

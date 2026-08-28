@@ -145,6 +145,24 @@ export class RateLimiter {
     state.blockedUntil = Math.max(state.blockedUntil, this.now() + waitMs);
   }
 
+
+  /**
+   * The tightest window's usage, for the readout Sidekick keeps in its status
+   * bar ("1/5 in 10 s"). Seeing the budget is the point: this limiter exists
+   * because overrunning it bans the player's IP from trade.
+   */
+  describe(policy: string): { used: number; limit: number; period: number } | null {
+    const state = this.policies.get(policy);
+    if (!state?.windows.length) return null;
+    const now = this.now();
+    const tightest = state.windows.reduce((a, b) => (a.periodMs <= b.periodMs ? a : b));
+    return {
+      used: this.expiries(tightest, now).length,
+      limit: tightest.limit,
+      period: Math.round(tightest.periodMs / 1000),
+    };
+  }
+
   /** Whole seconds left before `policy` is usable, for the UI. */
   secondsUntilReady(policy: string): number {
     return Math.ceil(this.delayFor(policy) / 1000);

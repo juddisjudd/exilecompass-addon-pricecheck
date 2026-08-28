@@ -41,7 +41,7 @@ export const CSS = `
   .pc-link:hover { color:var(--c-primary); }
 
   /* ── input ───────────────────────────────────────────────────────────── */
-  .pc-paste { width:100%; box-sizing:border-box; min-height:90px; resize:vertical;
+  .pc-paste { width:100%; box-sizing:border-box; min-height:70px; resize:vertical;
     font:10.5px/1.4 "JetBrains Mono",Consolas,monospace; }
   .pc-hint { font-size:10px; color:var(--c-accent); }
 
@@ -65,17 +65,18 @@ export const CSS = `
   .pc-chip-label { color:var(--c-accent); margin-right:3px; }
 
   /* ── filters ─────────────────────────────────────────────────────────── */
-  .pc-filters { flex:0 0 auto; display:flex; flex-direction:column; min-height:0; }
+  .pc-filters { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; }
   .pc-filters-head { display:flex; align-items:center; gap:6px; padding:3px 0; }
   .pc-filters-title { font-size:10px; font-weight:700; letter-spacing:.07em;
     text-transform:uppercase; color:var(--c-accent); background:none; border:none; padding:0;
     cursor:pointer; }
   .pc-filters-title:hover { color:var(--c-primary); }
   .pc-filters-count { font-size:10px; color:var(--c-accent); }
-  .pc-filter-list { max-height:190px; overflow-y:auto; border:1px solid rgba(167,154,133,.18); }
+  .pc-filter-list { flex:1 1 auto; min-height:0; overflow-y:auto;
+    border:1px solid rgba(167,154,133,.18); }
   .pc-section { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
     color:var(--c-accent); padding:5px 6px 3px; }
-  .pc-filter { display:grid; grid-template-columns:16px minmax(0,1fr) 54px 54px; gap:5px;
+  .pc-filter { display:grid; grid-template-columns:15px minmax(0,1fr) 46px 46px; gap:4px;
     align-items:center; padding:2px 6px; border-bottom:1px solid rgba(167,154,133,.1); }
   .pc-filter:hover { background:rgba(167,154,133,.07); }
   .pc-filter input[type=number] { width:100%; box-sizing:border-box; padding:1px 3px;
@@ -84,72 +85,72 @@ export const CSS = `
   .pc-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pc-tier { color:var(--c-accent); font-size:9.5px; margin-left:4px; }
 
-  /* ── listings ────────────────────────────────────────────────────────── */
-  .pc-results { flex:1 1 auto; min-height:0; overflow-y:auto;
-    border:1px solid rgba(167,154,133,.18); }
+  /* ── two panes ───────────────────────────────────────────────────────── */
+  .pc-panes { flex:1 1 auto; min-height:0; display:grid;
+    grid-template-columns:312px minmax(0,1fr); gap:8px; }
+  .pc-side { min-height:0; display:flex; flex-direction:column; gap:6px;
+    border-right:1px solid rgba(167,154,133,.18); padding-right:8px; }
+  .pc-search-wrap { margin-top:auto; flex:0 0 auto; }
+  .pc-search { width:100%; padding:6px; font-size:12px; letter-spacing:.04em; }
+  @media (max-width: 720px) {
+    .pc-panes { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
+    .pc-side { border-right:none; padding-right:0;
+      border-bottom:1px solid rgba(167,154,133,.18); padding-bottom:6px; }
+  }
 
-  /* A real table, fixed layout: the header and the body share one set of
-     column widths, so nothing can drift out of alignment. */
-  .pc-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-  .pc-table th, .pc-table td { padding:3px 6px; text-align:left; vertical-align:middle;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pc-table th.right, .pc-table td.right { text-align:right; }
-  .pc-table th { position:sticky; top:0; z-index:1; background:#0e0d0c; padding:0;
-    border-bottom:1px solid rgba(167,154,133,.24); font-size:9.5px; font-weight:700;
-    letter-spacing:.06em; text-transform:uppercase; color:var(--c-accent); }
-  .pc-table th:not(.right) { padding:4px 6px; }
-
-  /* Header buttons fill their cell and carry no chrome of their own — they are
-     column labels, not controls sitting inside one. Needs to out-specify the
-     panel-wide .pc button rule. */
-  .pc .pc-sort { display:block; width:100%; background:none; border:none;
-    padding:4px 6px; font:inherit; color:inherit; text-align:inherit; cursor:pointer;
-    text-transform:inherit; letter-spacing:inherit; }
-  .pc .pc-sort:hover { color:var(--c-primary); background:rgba(167,154,133,.1); }
-  .pc .pc-sort.on { color:var(--c-primary); }
-  .pc-table th.right .pc-sort { text-align:right; }
-
-  .pc-tr { border-bottom:1px solid rgba(167,154,133,.1); }
-  .pc-tr:hover { background:rgba(167,154,133,.07); }
-  .pc-table td.summary { color:var(--c-primary); }
-  .pc-table td.seller { color:var(--c-accent); }
-  .pc-table td.right { font-variant-numeric:tabular-nums; color:var(--c-accent); }
-  .pc-table td.listed { color:var(--c-accent); }
-  .pc-table td.price { color:var(--c-primary); font-weight:600; }
-  .pc .pc-item-btn { display:block; padding:1px; border:1px solid transparent; background:none;
-    line-height:0; border-radius:2px; cursor:pointer; }
-  .pc .pc-item-btn:hover, .pc .pc-item-btn.on { border-color:rgba(237,230,213,.5);
+  /* ── results ─────────────────────────────────────────────────────────── */
+  .pc-results { min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  .pc-results-head { position:sticky; top:0; z-index:1; background:var(--c-bg,#0b0a08);
+    display:flex; align-items:center; gap:8px; padding:2px 0 4px;
+    border-bottom:1px solid rgba(167,154,133,.18); }
+  .pc-count { font-size:10px; color:var(--c-accent); }
+  .pc-sorts { margin-left:auto; display:flex; gap:3px; }
+  .pc .pc-sort { background:none; border:1px solid transparent; padding:2px 6px;
+    font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--c-accent); cursor:pointer; }
+  .pc .pc-sort:hover { color:var(--c-primary); border-color:rgba(167,154,133,.3); }
+  .pc .pc-sort.on { color:var(--c-primary); border-color:rgba(237,230,213,.45);
     background:rgba(167,154,133,.14); }
-  .pc-icon { width:22px; height:22px; object-fit:contain; }
-  .pc-amount { margin-left:3px; }
-  .pc-cur { width:14px; height:14px; object-fit:contain; vertical-align:-3px; margin-left:2px; }
-  .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; margin-left:2px; }
-  .pc-norm { color:var(--c-accent); font-weight:400; font-size:10px; }
+
+  .pc-cards { display:flex; flex-direction:column; gap:5px; padding-bottom:4px; }
+  .pc-card { border:1px solid rgba(167,154,133,.2); background:rgba(167,154,133,.04); }
+  .pc-card:hover { border-color:rgba(167,154,133,.34); }
+  .pc-card-body { display:grid; grid-template-columns:minmax(0,1fr) 118px; }
+  .pc-card-item { padding:6px 8px; min-width:0; }
+  .pc-card-side { padding:6px 8px; display:flex; flex-direction:column; align-items:flex-end;
+    gap:1px; border-left:1px solid rgba(167,154,133,.14); text-align:right; }
+  .pc-price { display:flex; align-items:center; gap:3px; font-weight:700; font-size:13px;
+    font-variant-numeric:tabular-nums; color:var(--c-primary); }
+  .pc-cur { width:17px; height:17px; object-fit:contain; }
+  .pc-cur-text { font-size:10px; font-weight:400; color:var(--c-accent); }
+  .pc-norm { font-size:10px; color:var(--c-accent); font-variant-numeric:tabular-nums; }
+  .pc-card-seller { font-size:10px; color:var(--c-accent); max-width:100%;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
+  .pc-card-age { font-size:10px; color:var(--c-accent); opacity:.8; }
+  .pc-card-icon { width:30px; height:30px; object-fit:contain; margin-top:2px; }
   .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; }
   .pc-dot.online { background:#5fa372; }
   .pc-dot.afk { background:#d9a441; }
   .pc-dot.offline { background:#4a4438; }
   .pc-empty { padding:10px 6px; color:var(--c-accent); font-style:italic; }
 
-  /* ── expanded item ───────────────────────────────────────────────────── */
-  .pc-detail-row { border-bottom:1px solid rgba(167,154,133,.1); }
-  .pc-detail-row > td { padding:6px 9px 8px 36px; background:rgba(167,154,133,.05);
-    white-space:normal; }
-  .pc-detail-head { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
-    margin-bottom:3px; }
-  .pc-detail-facts { color:var(--c-accent); font-size:10px; margin-bottom:3px; max-width:720px; }
-  /* Capped to a readable measure: right-aligned tier and range are only
-     useful if they stay near the mod they belong to. */
-  .pc-mods { max-width:720px; display:flex; flex-direction:column; gap:1px;
-    border-top:1px solid rgba(167,154,133,.14); padding-top:3px; margin-top:3px; }
-  .pc-mod { display:flex; align-items:baseline; gap:6px; }
-  .pc-mod-text { color:#8c9ce6; }
+  /* ── the item inside a card ──────────────────────────────────────────── */
+  .pc-detail-head { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .pc-detail-facts { color:var(--c-accent); font-size:10px; margin-top:2px; }
+  .pc-mods { display:flex; flex-direction:column; gap:1px; margin-top:4px;
+    border-top:1px solid rgba(167,154,133,.14); padding-top:4px; }
+  .pc-mod { display:flex; align-items:baseline; gap:5px; }
+  .pc-mod-text { color:#8c9ce6; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
   .pc-mod.implicit .pc-mod-text, .pc-mod.enchant .pc-mod-text { color:#9bc8bd; }
   .pc-mod.rune .pc-mod-text { color:#c1a87a; }
-  .pc-mod-meta { margin-left:auto; display:flex; gap:6px; flex:0 0 auto; }
-  .pc-mod-affix { color:var(--c-accent); font-size:9.5px; }
-  .pc-mod-range { color:var(--c-accent); font-size:9.5px; font-variant-numeric:tabular-nums;
-    opacity:.8; }
+  /* Tiers sit in a fixed gutter so they line up into a scannable column. */
+  .pc-affix { flex:0 0 22px; font-size:9.5px; font-weight:700; letter-spacing:.02em;
+    font-variant-numeric:tabular-nums; }
+  .pc-affix.prefix { color:#ec7676; }
+  .pc-affix.suffix { color:#7aaff1; }
+  .pc-mod-range { margin-left:auto; flex:0 0 auto; color:var(--c-accent); font-size:9.5px;
+    font-variant-numeric:tabular-nums; opacity:.75; }
 
   .pc-foot { flex:0 0 auto; font-size:9.5px; color:var(--c-accent);
     display:flex; justify-content:space-between; gap:6px; align-items:center; }

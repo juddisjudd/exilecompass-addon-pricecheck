@@ -62,8 +62,6 @@ interface State {
   pasteOpen: boolean;
   filtersOpen: boolean;
   localSort: SortState;
-  /** Listing ids whose full item is open. */
-  expanded: Set<string>;
   currencies: CurrencyIndex | null;
   rates: Rates | null;
 }
@@ -95,7 +93,6 @@ const mount: MountFn = async ({ root, host }) => {
     total: 0,
     queryId: '',
     status: '',
-    expanded: new Set(),
     error: '',
     busy: false,
     pasteOpen: true,
@@ -115,9 +112,16 @@ const mount: MountFn = async ({ root, host }) => {
   let statIndex: StatIndex | null = null;
 
   // ── shell ────────────────────────────────────────────────────────────────
+  // Two columns, as Sidekick lays it out (`ItemOverlay.razor`'s
+  // LayoutTwoColumn): the item and its filters on the left, the listings on
+  // the right. Stacked, the filters pushed the prices off the bottom of the
+  // panel — the two are read together, not one after the other.
   const shell = el('div', 'pc');
   const bar = el('div', 'pc-bar');
   const notice = el('div');
+
+  const panes = el('div', 'pc-panes');
+  const side = el('div', 'pc-side');
   const pasteWrap = el('div', 'pc-paste-wrap');
   const paste = el('textarea', 'pc-paste');
   paste.placeholder = 'Copy an item in game with Ctrl+C (hold Alt for mod tiers) and paste it here.';
@@ -128,9 +132,14 @@ const mount: MountFn = async ({ root, host }) => {
   const filtersHead = el('div', 'pc-filters-head');
   const filterList = el('div', 'pc-filter-list');
   filters.append(filtersHead, filterList);
+  const searchWrap = el('div', 'pc-search-wrap');
+  side.append(pasteWrap, itemHead, filters, searchWrap);
+
   const resultList = el('div', 'pc-results');
+  panes.append(side, resultList);
+
   const foot = el('div', 'pc-foot');
-  shell.append(bar, notice, pasteWrap, itemHead, filters, resultList, foot);
+  shell.append(bar, notice, panes, foot);
   root.append(shell);
 
   // ── settings ─────────────────────────────────────────────────────────────
@@ -195,7 +204,6 @@ const mount: MountFn = async ({ root, host }) => {
     state.total = 0;
     state.queryId = '';
     state.localSort = { column: 'none', descending: false };
-    state.expanded.clear();
   }
 
   async function parseInput(text: string): Promise<void> {
@@ -259,10 +267,7 @@ const mount: MountFn = async ({ root, host }) => {
       state.total = outcome.total;
       state.queryId = outcome.queryId;
       state.localSort = { column: 'none', descending: false };
-    state.expanded.clear();
       state.status = outcome.total === 0 ? 'No matches.' : `${outcome.total} listings.`;
-      // Prices are the answer; collapse the filters once there are some.
-      if (outcome.listings.length) state.filtersOpen = false;
     } catch (err) {
       state.error =
         err instanceof TradeError ? err.message : `Search failed: ${(err as Error).message}`;
@@ -346,13 +351,20 @@ const mount: MountFn = async ({ root, host }) => {
       core.append(button);
     }
 
-    const go = el('button', 'pc-primary', state.busy ? 'Searching…' : 'Price check');
-    go.type = 'button';
-    go.disabled = state.busy || !state.item || !state.leagues;
-    go.addEventListener('click', () => void runSearch());
+    bar.append(toggle, status, sort, el('div', 'pc-status', state.status));
+    if (cores.length > 1) bar.append(core);
+  }
 
-    bar.append(toggle, status, sort, go, el('div', 'pc-status', state.status));
-    if (cores.length > 1) bar.insertBefore(core, go);
+  // Sidekick anchors Search at the bottom of the filter column, under
+  // everything it acts on. Same here.
+  function renderSearch(): void {
+    searchWrap.replaceChildren();
+    if (!state.item) return;
+    const go = el('button', 'pc-primary pc-search', state.busy ? 'Searching…' : 'Search');
+    go.type = 'button';
+    go.disabled = state.busy || !state.leagues;
+    go.addEventListener('click', () => void runSearch());
+    searchWrap.append(go);
   }
 
   function renderNotice(): void {
@@ -453,8 +465,8 @@ const mount: MountFn = async ({ root, host }) => {
       listings: sortListings(state.listings, state.localSort),
       total: state.total,
       sort: state.localSort,
+      priceSorted: state.localSort.column === 'none',
       priceDescending: state.settings.sort === 'price-desc',
-      expanded: state.expanded,
       currencies: state.currencies,
       rates: state.rates,
       core: state.settings.core,
@@ -466,14 +478,13 @@ const mount: MountFn = async ({ root, host }) => {
         renderList();
       },
       onPriceSort: () => {
-        state.settings.sort = state.settings.sort === 'price-asc' ? 'price-desc' : 'price-asc';
+        // Back to the server's order, flipping direction if it was already on.
+        if (state.localSort.column === 'none') {
+          state.settings.sort = state.settings.sort === 'price-asc' ? 'price-desc' : 'price-asc';
+        }
+        state.localSort = { column: 'none', descending: false };
         void saveSettings();
         void runSearch();
-      },
-      onToggleItem: (id: string) => {
-        if (state.expanded.has(id)) state.expanded.delete(id);
-        else state.expanded.add(id);
-        renderList();
       },
     });
   }
@@ -483,6 +494,7 @@ const mount: MountFn = async ({ root, host }) => {
     renderNotice();
     renderItem();
     renderFilterBlock();
+    renderSearch();
     renderList();
     renderFoot();
   }

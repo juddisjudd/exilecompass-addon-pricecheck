@@ -1,0 +1,15 @@
+{
+  "name": "@exilecompass/pricecheck-addon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "bun test/parser.test.ts && bun test/rate-limiter.test.ts && bun test/match.test.ts",
+    "build": "esbuild src/panel.ts --bundle --format=esm --platform=browser --outfile=dist/panel.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2"
+  }
+}

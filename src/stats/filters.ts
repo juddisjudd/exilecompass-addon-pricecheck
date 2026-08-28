@@ -1,17 +1,61 @@
 import type { ParsedItem } from '../parser/types';
 import type { MatchResult } from './match';
 
-/** A row in the filter list: one checkbox plus a min/max pair. */
+/**
+ * How a row's numbers are read. The API only ever takes a `{min, max}` pair,
+ * so this is presentation over the same two fields — but "at least 33" and
+ * "exactly 33" are different questions, and making the reader infer which one
+ * an empty box means is how you end up with the wrong search. Sidekick offers
+ * the same four.
+ */
+export type Comparison = 'min' | 'max' | 'exact' | 'range';
+
+export const COMPARISONS: Array<{ key: Comparison; symbol: string; label: string }> = [
+  { key: 'min', symbol: '≥', label: 'At least' },
+  { key: 'max', symbol: '≤', label: 'At most' },
+  { key: 'exact', symbol: '=', label: 'Exactly' },
+  { key: 'range', symbol: '⇔', label: 'Between' },
+];
+
+/** A row in the filter list: a checkbox, a comparison, and its numbers. */
 export interface FilterRow {
   key: string;
   label: string;
   /** The rolled value, for the "as rolled" hint. */
   rolled: number | null;
+  comparison: Comparison;
   min: number | null;
   max: number | null;
   enabled: boolean;
   tier?: number;
   affix?: 'prefix' | 'suffix';
+}
+
+/** The `{min, max}` the API is actually sent, given the row's comparison. */
+export function bounds(row: FilterRow): { min?: number; max?: number } | undefined {
+  const value: { min?: number; max?: number } = {};
+  const min = Number.isFinite(row.min) ? (row.min as number) : null;
+  const max = Number.isFinite(row.max) ? (row.max as number) : null;
+
+  switch (row.comparison) {
+    case 'min':
+      if (min !== null) value.min = min;
+      break;
+    case 'max':
+      if (max !== null) value.max = max;
+      break;
+    case 'exact':
+      if (min !== null) {
+        value.min = min;
+        value.max = min;
+      }
+      break;
+    case 'range':
+      if (min !== null) value.min = min;
+      if (max !== null) value.max = max;
+      break;
+  }
+  return Object.keys(value).length ? value : undefined;
 }
 
 export interface StatFilterRow extends FilterRow {
@@ -54,6 +98,7 @@ export function buildStatFilters(match: MatchResult): StatFilterRow[] {
     return {
       kind: 'stat',
       key: `stat-${i}-${m.entry.id}`,
+      comparison: 'min',
       statId: m.entry.id,
       label: line.text,
       rolled,
@@ -83,6 +128,7 @@ export function buildEquipmentFilters(item: ParsedItem): EquipmentFilterRow[] {
     rows.push({
       kind: 'equipment',
       key: `eq-${field}`,
+      comparison: 'min',
       field,
       label,
       rolled: rounded,

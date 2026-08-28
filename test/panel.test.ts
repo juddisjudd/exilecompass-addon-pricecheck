@@ -163,7 +163,7 @@ check('no expansion needed to see it', $$('.pc-item-btn').length === 0, 'still b
 
 // Sidekick puts the affix tier in the margin, prefixes and suffixes coloured
 // apart. Ours reads the same P#/S# shorthand straight off the payload.
-const tiers = $$('.pc-card .pc-affix').filter((n) => String(n.textContent).trim());
+const tiers = [...firstCard.querySelectorAll('.pc-affix')].filter((n) => String(n.textContent).trim());
 check('affix tiers are badged', tiers.map((n) => n.textContent).join(',') === 'P7,P3', tiers.map((n) => n.textContent).join(','));
 check('prefixes are marked as prefixes', tiers.every((n) => n.className.includes('prefix')), tiers.map((n) => n.className).join('|'));
 check('roll ranges are shown', /39–51/.test(cardText()) && /70–84/.test(cardText()), cardText());
@@ -177,6 +177,21 @@ check('so are requirement names', /56 Str/.test(bootsText) && /56 Int/.test(boot
 check('no link markup survives anywhere', !/[[\]|]/.test(bootsText), bootsText);
 check('properties read as a list', /Boots · Armour: 134 · Energy Shield: 37/.test(bootsText), bootsText);
 check('requirements read as the game phrases them', /Requires Level 75, 56 Str, 56 Int/.test(bootsText), bootsText);
+
+
+// A desecrated mod arrives inside explicitMods with flags, not in an array of
+// its own, so the array it came from is the wrong thing to colour it by.
+const desecratedCard = $$('.pc-card')[2] as HTMLElement;
+check('desecrated mods are recognised', !!desecratedCard.querySelector('.pc-mod.desecrated'), String(desecratedCard.querySelector('.pc-mod')?.className));
+check('and labelled', /desecrated/.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 200));
+check(
+  'plain explicits on the same item are not',
+  desecratedCard.querySelectorAll('.pc-mod.explicit').length === 1,
+  `${desecratedCard.querySelectorAll('.pc-mod.explicit').length}`,
+);
+// Rune mods carry no tier, so the badge gutter stays empty rather than guessing.
+check('rune mods are marked', !!desecratedCard.querySelector('.pc-mod.rune'));
+check('with the Bonded prefix unwrapped', /Bonded: \+20 to maximum Life/.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 240));
 
 // Price, seller and age sit together on the card's right.
 check('the price is on the card', !!$('.pc-card .pc-price'), 'no price');
@@ -241,7 +256,9 @@ const norms = () => $$('.pc-norm').map((n) => String(n.textContent).trim());
 check('no redundant conversion for the core currency', norms().length === 0, norms().join(' '));
 
 // Switching the core currency restates them all, with no further API call.
-const cores = $$('.pc-toggle')[1];
+// The core currency now sits with the other result controls under Search, and
+// the league switch with the league name in the footer.
+const cores = $('.pc-search-controls .pc-toggle');
 check('a core toggle is offered', !!cores, 'no toggle rendered');
 const coreButtons = [...cores.children] as HTMLElement[];
 check('with exactly two options, as in EE2', coreButtons.length === 2, `${coreButtons.length}`);
@@ -263,11 +280,41 @@ check('never a raw float', !norms().some((t) => /\.\d{3,}/.test(t)), norms().joi
 check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').core === 'chaos');
 
 // Switching league must not leave the other market's prices on screen.
-click($$('.pc-toggle button')[1]);
+click($$('.pc-foot-league .pc-toggle button')[1]);
 await settle();
 check('changing league clears stale listings', $$('.pc-tr').length === 0);
 check('and the footer follows', /HC Runes of Aldur/.test(text()), text().slice(0, 160));
 
+
+
+
+// ── comparison modes ────────────────────────────────────────────────────────
+// The API only takes {min, max}, so these are four readings of the same two
+// boxes — but "at least 33" and "exactly 33" are different searches.
+const firstFilter = $('.pc-filter') as HTMLElement;
+const compare = firstFilter.querySelector('.pc-compare') as HTMLSelectElement;
+check('every filter row offers a comparison', !!compare, 'no comparison select');
+check('with four modes', compare.options.length === 4, `${compare.options.length}`);
+check('symbols, not words', [...compare.options].map((o) => o.value).join(','), 'min,max,exact,range');
+check('defaulting to at-least', compare.value === 'min', compare.value);
+
+const numbers = () => [...firstFilter.querySelectorAll('input[type=number]')] as HTMLElement[];
+check('at-least shows only the min box', numbers()[1].style.display === 'none');
+
+compare.value = 'range';
+compare.dispatchEvent(new win.Event('change', { bubbles: true }));
+await settle();
+check('between shows both boxes', numbers().every((n) => n.style.display !== 'none'));
+
+compare.value = 'max';
+compare.dispatchEvent(new win.Event('change', { bubbles: true }));
+await settle();
+check('at-most shows only the max box', numbers()[0].style.display === 'none');
+
+compare.value = 'exact';
+compare.dispatchEvent(new win.Event('change', { bubbles: true }));
+await settle();
+check('exactly relabels the single box', (numbers()[0] as HTMLInputElement).placeholder === 'value');
 
 // Clear drops the item, its filters and its results in one go.
 click($$('.pc-link').find((n) => String(n.textContent).includes('Clear')));

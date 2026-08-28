@@ -35,6 +35,32 @@ function requirementsText(lines: ListingLine[]): string {
   return parts.length ? `Requires ${parts.join(', ')}` : '';
 }
 
+/**
+ * A mod's real kind, which is not the array it arrived in: a desecrated mod
+ * comes back inside `explicitMods` carrying `flags: {desecrated: true}` and
+ * `domain: "desecrated"`, and painting it as an ordinary explicit loses the
+ * one thing that makes it interesting. Sidekick reads the same flags to pick a
+ * category (`ItemStatLineComponent.razor`).
+ */
+const FLAG_ORDER = ['mutated', 'fractured', 'crafted', 'desecrated'];
+
+export function modCategory(mod: ListingMod, fallback: string): string {
+  const flagged = FLAG_ORDER.find((flag) => mod.flags?.[flag]);
+  if (flagged) return flagged;
+  if (mod.domain && mod.domain !== 'explicit' && mod.domain !== 'implicit') return mod.domain;
+  return fallback;
+}
+
+/** Kinds worth naming in the margin; the common ones speak for themselves. */
+const KIND_LABEL: Record<string, string> = {
+  desecrated: 'desecrated',
+  crafted: 'crafted',
+  fractured: 'fractured',
+  mutated: 'cultivated',
+  rune: 'rune',
+  enchant: 'enchant',
+};
+
 /** `39–51`, the range this roll came out of. */
 function rangeLabel(mod: ListingMod): string | null {
   const magnitudes = mod.mods?.[0]?.magnitudes ?? [];
@@ -66,9 +92,14 @@ function tierBadge(mod: ListingMod): HTMLElement {
   return badge;
 }
 
-function modRow(mod: ListingMod, kind: string): HTMLElement {
+function modRow(mod: ListingMod, fallbackKind: string): HTMLElement {
+  const kind = modCategory(mod, fallbackKind);
   const row = el('div', `pc-mod ${kind}`);
   row.append(tierBadge(mod), el('span', 'pc-mod-text', cleanDescription(mod.description ?? '')));
+
+  const label = KIND_LABEL[kind];
+  if (label) row.append(el('span', 'pc-mod-kind', label));
+
   const range = rangeLabel(mod);
   if (range) row.append(el('span', 'pc-mod-range', range));
   return row;

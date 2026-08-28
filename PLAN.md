@@ -681,6 +681,33 @@ It stays visible after a paste (it costs one line) and empties itself once the
 item is read, so the next paste needs no clearing. `Clear` on the item header
 drops the item, its filters and its results together.
 
+
+**Tier filtering is not possible server-side.** Asked for, and worth recording
+as settled: a `tier` field inside a stat filter is **silently ignored** (the
+query id comes back identical, so it changed nothing), and a `tier` entry under
+`type_filters` is a hard `400 — "Invalid filter: tier"`. Both verified live.
+Filtering the fetched page by tier locally would be worse than nothing: it would
+narrow ten listings out of hundreds and report the total as if it had searched
+them all. The honest equivalent is already there — tier tracks roll value, so
+"at least what mine rolled" is a min filter, and every result shows its tier
+badge so you can read it off.
+
+**A mod's kind is in its flags, not the array it came in.** A desecrated mod
+arrives *inside* `explicitMods` carrying `flags: {desecrated: true}` and
+`domain: "desecrated"`; so do crafted and fractured ones. Colouring by the
+containing array paints them as ordinary explicits and throws away the only
+interesting thing about them. `modCategory()` reads flags first, then domain,
+then falls back to the array — the same order Sidekick uses
+(`ItemStatLineComponent.razor`) — and the uncommon kinds get a small label.
+Rune mods have no `mods` array at all, so no tier and no range: the badge
+gutter stays empty rather than inventing one.
+
+**Filter rows carry a comparison** — ≥ / ≤ / = / between, as Sidekick offers.
+The API only ever takes a `{min, max}` pair, so this is presentation over the
+same two fields, but "at least 33" and "exactly 33" are different questions and
+an empty box is a poor way to ask either. `bounds()` in `stats/filters.ts` is
+the single place that maps a comparison onto the pair.
+
 **Currency is shown as an icon, not a word.** `/data/static` publishes a name
 and image for every currency, keyed by exactly the id a listing's
 `price.currency` carries, so there is nothing to bundle or map by hand — Sidekick

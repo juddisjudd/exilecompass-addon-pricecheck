@@ -1,5 +1,6 @@
 // Run with: bun test/currency.test.ts
 import { abbreviate, CurrencyIndex, POE_CDN, Rates } from '../src/trade/currency';
+import { bounds } from '../src/stats/filters';
 import { formatAmount } from '../src/ui/format';
 
 let failures = 0;
@@ -112,6 +113,20 @@ check('an unknown id abbreviates to itself', abbreviate('mystery'), 'mystery');
 
 const empty = new Rates({ lines: [] }, 'divine');
 check('an empty overview is not usable', empty.known, false);
+
+
+// ── comparison modes map onto the API's {min, max} ──────────────────────────
+const row = (comparison: string, min: number | null, max: number | null) =>
+  ({ comparison, min, max }) as unknown as Parameters<typeof bounds>[0];
+
+check('at least sends a floor', JSON.stringify(bounds(row('min', 33, null))), '{"min":33}');
+check('and ignores a stray max', JSON.stringify(bounds(row('min', 33, 99))), '{"min":33}');
+check('at most sends a ceiling', JSON.stringify(bounds(row('max', null, 40))), '{"max":40}');
+check('reading the max box, not the min', JSON.stringify(bounds(row('max', 33, 40))), '{"max":40}');
+check('exactly pins both ends', JSON.stringify(bounds(row('exact', 33, null))), '{"min":33,"max":33}');
+check('between sends the pair', JSON.stringify(bounds(row('range', 33, 40))), '{"min":33,"max":40}');
+check('an empty row sends nothing', bounds(row('min', null, null)), undefined);
+check('nor does an empty exact', bounds(row('exact', null, null)), undefined);
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);

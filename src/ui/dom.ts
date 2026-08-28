@@ -33,7 +33,7 @@ export const CSS = `
   .pc-toggle button { border-right-width:0; font-size:10px; font-weight:600; letter-spacing:.04em; }
   .pc-toggle button:last-child { border-right-width:1px; }
   .pc-toggle button.on { background:rgba(237,230,213,.16); border-color:rgba(237,230,213,.5); }
-  .pc-status { margin-left:auto; font-size:10px; color:var(--c-accent); }
+  .pc-status { margin-left:auto; font-size:10.5px; color:var(--c-accent); }
   .pc-error { color:#e2333c; font-size:10.5px; flex:0 0 auto; }
   .pc-warn { color:#d9a441; font-size:10.5px; flex:0 0 auto; }
   .pc-link { background:none; border:none; padding:0; color:var(--c-accent);
@@ -84,7 +84,7 @@ export const CSS = `
     border:1px solid rgba(167,154,133,.18); }
   .pc-section { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
     color:var(--c-accent); padding:5px 6px 3px; }
-  .pc-filter { display:grid; grid-template-columns:15px minmax(0,1fr) 46px 46px; gap:4px;
+  .pc-filter { display:grid; grid-template-columns:15px minmax(0,1fr) 30px 44px 44px; gap:4px;
     align-items:center; padding:2px 6px; border-bottom:1px solid rgba(167,154,133,.1); }
   .pc-filter:hover { background:rgba(167,154,133,.07); }
   .pc-filter input[type=number] { width:100%; box-sizing:border-box; padding:1px 3px;
@@ -98,7 +98,9 @@ export const CSS = `
     grid-template-columns:312px minmax(0,1fr); gap:8px; }
   .pc-side { min-height:0; display:flex; flex-direction:column; gap:6px;
     border-right:1px solid rgba(167,154,133,.18); padding-right:8px; }
-  .pc-search-wrap { margin-top:auto; flex:0 0 auto; }
+  .pc-search-wrap { margin-top:auto; flex:0 0 auto; display:flex; flex-direction:column; gap:5px; }
+  .pc-search-controls { display:flex; align-items:center; gap:5px; }
+  .pc-search-controls select { flex:1 1 auto; min-width:0; }
   .pc-search { width:100%; padding:6px; font-size:12px; letter-spacing:.04em; }
   @media (max-width: 720px) {
     .pc-panes { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
@@ -158,10 +160,19 @@ export const CSS = `
     font-variant-numeric:tabular-nums; }
   .pc-affix.prefix { color:#ec7676; }
   .pc-affix.suffix { color:#7aaff1; }
+  .pc-compare { padding:1px 0; text-align:center; font-size:11px; }
+  .pc-mod-kind { flex:0 0 auto; font-size:9px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--c-accent); opacity:.85; border:1px solid rgba(167,154,133,.28); padding:0 3px; }
+  .pc-mod.desecrated .pc-mod-text { color:#c78ee0; }
+  .pc-mod.crafted .pc-mod-text { color:#b8daf5; }
+  .pc-mod.fractured .pc-mod-text { color:#c2a875; }
+  .pc-mod.mutated .pc-mod-text { color:#e0a06a; }
   .pc-mod-range { margin-left:auto; flex:0 0 auto; color:var(--c-accent); font-size:9.5px;
     font-variant-numeric:tabular-nums; opacity:.75; }
 
   .pc-foot { flex:0 0 auto; font-size:9.5px; color:var(--c-accent);
-    display:flex; justify-content:space-between; gap:6px; align-items:center; }
+    display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .pc-foot-league { display:flex; align-items:center; gap:6px; }
+  .pc-limit { font-variant-numeric:tabular-nums; }
 `;
 

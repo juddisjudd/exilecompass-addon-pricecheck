@@ -121,6 +121,27 @@ export const FETCH_RESPONSE = {
         baseType: 'Prismatic Ring',
         ilvl: 65,
         rarity: 'Rare',
+        // Rune mods carry no tier or magnitudes, and their text can start with
+        // a label of its own — `[ShamanOnlyMods|Bonded]` prints as "Bonded".
+        runeMods: [
+          { description: '+18% to [Resistances|Cold Resistance]', domain: 'rune' },
+          { description: '[ShamanOnlyMods|Bonded]: +20 to maximum Life', domain: 'rune' },
+        ],
+        // A desecrated mod arrives *inside* explicitMods, flagged. Colouring by
+        // the array it came from would render it as an ordinary explicit.
+        explicitMods: [
+          {
+            description: '35% increased Movement Speed',
+            domain: 'explicit',
+            mods: [{ name: "Hellion's", tier: 'P1', magnitudes: [{ min: '35', max: '35' }] }],
+          },
+          {
+            description: '+42 to maximum [EnergyShield|Energy Shield]',
+            flags: { desecrated: true },
+            domain: 'desecrated',
+            mods: [{ name: 'Pulsing', tier: 'P2', magnitudes: [{ min: '40', max: '49' }] }],
+          },
+        ],
       },
     },
     // The API returns null for a listing that vanished between search and fetch.

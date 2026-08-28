@@ -18,7 +18,15 @@ import {
   type Rates,
 } from './trade/currency';
 import { buildQuery } from './trade/query';
-import { search, searchUrl, sortFor, SORTS, type Listing, type SortKey } from './trade/search';
+import {
+  search,
+  searchUrl,
+  SEARCH_POLICY,
+  sortFor,
+  SORTS,
+  type Listing,
+  type SortKey,
+} from './trade/search';
 import { CSS, el } from './ui/dom';
 import { MAX_ENABLED_FILTERS, renderFilters } from './ui/filters';
 import { renderItemHeader } from './ui/item';
@@ -287,9 +295,18 @@ const mount: MountFn = async ({ root, host }) => {
   }
 
   // ── render ───────────────────────────────────────────────────────────────
+  /**
+   * The top bar carries only what is happening — the league lives in the
+   * footer beside its name, and the two controls that shape the results (what
+   * to order by, what currency to read prices in) sit under Search, with the
+   * filters they belong to. With nothing to say it takes no room at all.
+   */
   function renderBar(): void {
-    bar.replaceChildren();
+    bar.style.display = state.status ? '' : 'none';
+    bar.replaceChildren(el('div', 'pc-status', state.status));
+  }
 
+  function renderLeagueToggle(): HTMLElement {
     const toggle = el('div', 'pc-toggle');
     (['sc', 'hc'] as LeagueMode[]).forEach((mode) => {
       const league = state.leagues ? (mode === 'hc' ? state.leagues.hc : state.leagues.sc) : null;
@@ -306,6 +323,22 @@ const mount: MountFn = async ({ root, host }) => {
       });
       toggle.append(button);
     });
+    return toggle;
+  }
+
+  // Sidekick anchors Search at the bottom of the filter column, under
+  // everything it acts on. Same here, with the result controls beneath it.
+  function renderSearch(): void {
+    searchWrap.replaceChildren();
+    if (!state.item) return;
+
+    const go = el('button', 'pc-primary pc-search', state.busy ? 'Searching…' : 'Search');
+    go.type = 'button';
+    go.disabled = state.busy || !state.leagues;
+    go.addEventListener('click', () => void runSearch());
+    searchWrap.append(go);
+
+    const controls = el('div', 'pc-search-controls');
 
     const sort = el('select');
     sort.title = 'What the search asks the API for';
@@ -321,40 +354,31 @@ const mount: MountFn = async ({ root, host }) => {
       void saveSettings();
       if (state.listings.length) void runSearch();
     });
+    controls.append(sort);
 
     // Exiled Exchange 2 offers exactly two core currencies as radio buttons;
     // divine is not among them because `normalize` promotes to divines on its
     // own once a price is worth one. Hidden entirely without rates — a
     // converter with nothing to convert by is a control that does nothing.
     const cores = state.rates?.cores() ?? [];
-    const core = el('div', 'pc-toggle');
-    for (const id of cores) {
-      const button = el('button', state.settings.core === id ? 'on' : undefined);
-      button.type = 'button';
-      button.textContent = abbreviate(id).toUpperCase();
-      button.title = `Show prices in ${state.currencies?.get(id).name ?? id}`;
-      button.addEventListener('click', () => {
-        state.settings.core = id;
-        void saveSettings();
-        render();
-      });
-      core.append(button);
+    if (cores.length > 1) {
+      const core = el('div', 'pc-toggle');
+      for (const id of cores) {
+        const button = el('button', state.settings.core === id ? 'on' : undefined);
+        button.type = 'button';
+        button.textContent = abbreviate(id).toUpperCase();
+        button.title = `Show prices in ${state.currencies?.get(id).name ?? id}`;
+        button.addEventListener('click', () => {
+          state.settings.core = id;
+          void saveSettings();
+          render();
+        });
+        core.append(button);
+      }
+      controls.append(core);
     }
 
-    bar.append(toggle, sort, el('div', 'pc-status', state.status));
-    if (cores.length > 1) bar.append(core);
-  }
-
-  // Sidekick anchors Search at the bottom of the filter column, under
-  // everything it acts on. Same here.
-  function renderSearch(): void {
-    searchWrap.replaceChildren();
-    if (!state.item) return;
-    const go = el('button', 'pc-primary pc-search', state.busy ? 'Searching…' : 'Search');
-    go.type = 'button';
-    go.disabled = state.busy || !state.leagues;
-    go.addEventListener('click', () => void runSearch());
-    searchWrap.append(go);
+    searchWrap.append(controls);
   }
 
   function renderNotice(): void {
@@ -441,12 +465,21 @@ const mount: MountFn = async ({ root, host }) => {
   function renderFoot(): void {
     foot.replaceChildren();
     const league = state.leagues ? leagueFor(state.leagues, state.settings.mode) : null;
-    foot.append(el('span', undefined, league ? leagueLabel(league) : 'Resolving league…'));
 
-    if (state.listings.length) {
-      foot.append(
-        el('span', undefined, `Showing ${state.listings.length} of ${state.total} listings`),
-      );
+    // The switch belongs beside the league it switches, and the footer is
+    // already where the panel says which league it is searching.
+    const where = el('div', 'pc-foot-league');
+    where.append(
+      renderLeagueToggle(),
+      el('span', undefined, league ? leagueLabel(league) : 'Resolving league…'),
+    );
+    foot.append(where);
+
+    const limit = client.limiter.describe(SEARCH_POLICY);
+    if (limit) {
+      const usage = el('span', 'pc-limit', `${limit.used}/${limit.limit} searches per ${limit.period}s`);
+      usage.title = 'GGG rate limit. Going over it bans your IP from trade for a while.';
+      foot.append(usage);
     }
 
     if (state.queryId && league && host.shell) {

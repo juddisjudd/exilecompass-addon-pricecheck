@@ -1,5 +1,5 @@
 import type { ParsedItem } from '../parser/types';
-import type { AnyFilterRow } from '../stats/filters';
+import { bounds, type AnyFilterRow } from '../stats/filters';
 
 /**
  * The request body `/search/<league>` takes. Shape confirmed against
@@ -90,12 +90,6 @@ const CATEGORY_BY_CLASS: Record<string, string> = {
   'Meta Gems': 'gem.metagem',
 };
 
-function bounds(row: AnyFilterRow): { min?: number; max?: number } | undefined {
-  const value: { min?: number; max?: number } = {};
-  if (row.min !== null && Number.isFinite(row.min)) value.min = row.min;
-  if (row.max !== null && Number.isFinite(row.max)) value.max = row.max;
-  return Object.keys(value).length ? value : undefined;
-}
 
 export function buildQuery(
   item: ParsedItem,

@@ -34,7 +34,8 @@ off the response, neither of which older hosts can do.
 2. In game, hover an item and press `Ctrl+C` — hold `Alt` (the Advanced Item
    Descriptions key) as well, to get mod tiers and roll ranges.
 3. Click the paste strip in the panel and press `Ctrl+V`. Tick the modifiers
-   you care about, adjust the min/max values, then press **Search**.
+   you care about, pick how to read each number (≥, ≤, =, between), then press
+   **Search**.
 
 Hotkey-driven checks over the game, without the paste step, arrive with the
 next host release.

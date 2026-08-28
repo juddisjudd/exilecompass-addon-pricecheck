@@ -68,6 +68,8 @@ export interface ModDetail {
  */
 export interface ListingMod {
   description?: string;
+  /** Set on mods that are not plain explicits: crafted, fractured, desecrated. */
+  flags?: Record<string, boolean>;
   domain?: string;
   hash?: string;
   mods?: ModDetail[];

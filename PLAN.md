@@ -660,6 +660,27 @@ from. And `description` carries PoE's own link markup
 (`[ElementalDamage|Elemental]`, `[Resistances]`), which reads as wiki source
 until it is unwrapped: `[a|b]` takes the second half, `[a]` the first.
 
+
+**Property and requirement names carry the link markup too.** Only mod
+descriptions were being unwrapped for a while, so gear rendered as
+`Boots • [Armour]: 134 • [EnergyShield|Energy Shield]: 37 • [Strength|Str]: 56`.
+Everything the payload gives as display text goes through `cleanDescription`.
+Requirements are then phrased the way the game phrases them —
+`Requires Level 75, 56 Str, 56 Int` — rather than listed as name/value pairs.
+
+**No online-status control.** It offered online / online-in-league / any, which
+mattered when buying meant whispering someone. PoE2 sells through in-game
+asynchronous offers, so whether the seller is logged in says nothing about
+whether the item is purchasable. The query still asks for `online`, the trade
+site's own default: widening it to `any` would let long-abandoned listings set
+the price.
+
+**The paste box is a one-line strip**, not a text area. Nobody types item text,
+and a tall empty box was taking space both the filters and the listings wanted.
+It stays visible after a paste (it costs one line) and empties itself once the
+item is read, so the next paste needs no clearing. `Clear` on the item header
+drops the item, its filters and its results together.
+
 **Currency is shown as an icon, not a word.** `/data/static` publishes a name
 and image for every currency, keyed by exactly the id a listing's
 `price.currency` carries, so there is nothing to bundle or map by hand — Sidekick

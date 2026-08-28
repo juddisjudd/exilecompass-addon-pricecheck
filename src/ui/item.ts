@@ -53,8 +53,8 @@ export function itemChips(item: ParsedItem): Chip[] {
 
 export interface ItemHeaderOptions {
   item: ParsedItem;
-  /** Reopens the paste box for a different item. */
-  onChange: () => void;
+  /** Drops the item, its filters and its results. */
+  onClear: () => void;
 }
 
 const RARITY_CLASS: Record<string, string> = {
@@ -82,9 +82,10 @@ export function renderItemHeader(container: HTMLElement, options: ItemHeaderOpti
   if (item.unidentified) top.append(el('span', 'pc-flag', 'unidentified'));
   if (item.mirrored) top.append(el('span', 'pc-flag', 'mirrored'));
 
-  const change = el('button', 'pc-link', 'Change item');
+  const change = el('button', 'pc-link', 'Clear');
   change.type = 'button';
-  change.addEventListener('click', options.onChange);
+  change.title = 'Clear this item and its results';
+  change.addEventListener('click', options.onClear);
   top.append(change);
 
   container.append(top);

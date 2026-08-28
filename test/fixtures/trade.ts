@@ -83,6 +83,20 @@ export const FETCH_RESPONSE = {
         baseType: 'Prismatic Ring',
         ilvl: 81,
         rarity: 'Rare',
+        // Property and requirement *names* carry the same link markup the mod
+        // descriptions do — which is easy to miss, because for a while only the
+        // mods were being unwrapped and gear rendered as
+        // "[EnergyShield|Energy Shield]: 37 • [Strength|Str]: 56".
+        properties: [
+          { name: 'Boots', values: [] as Array<[string, number]> },
+          { name: '[Armour]', values: [['134', 0] as [string, number]] },
+          { name: '[EnergyShield|Energy Shield]', values: [['37', 0] as [string, number]] },
+        ],
+        requirements: [
+          { name: 'Level', values: [['75', 0] as [string, number]] },
+          { name: '[Strength|Str]', values: [['56', 0] as [string, number]] },
+          { name: '[Intelligence|Int]', values: [['56', 0] as [string, number]] },
+        ],
       },
     },
     {

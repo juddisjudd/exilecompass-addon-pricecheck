@@ -33,8 +33,8 @@ off the response, neither of which older hosts can do.
 1. Open the **Price Check** tab in ExileCompass.
 2. In game, hover an item and press `Ctrl+C` — hold `Alt` (the Advanced Item
    Descriptions key) as well, to get mod tiers and roll ranges.
-3. Paste into the panel. Tick the modifiers you care about and adjust the
-   min/max values, then press **Price check**.
+3. Click the paste strip in the panel and press `Ctrl+V`. Tick the modifiers
+   you care about, adjust the min/max values, then press **Search**.
 
 Hotkey-driven checks over the game, without the paste step, arrive with the
 next host release.

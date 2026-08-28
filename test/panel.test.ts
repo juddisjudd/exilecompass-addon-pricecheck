@@ -120,7 +120,10 @@ paste.value = ITEM;
 paste.dispatchEvent(new win.Event('input', { bubbles: true }));
 await settle(150);
 
-check('paste box collapses once parsed', !shown('.pc-paste-wrap'));
+// The paste strip stays put: it is one line now, so it costs nothing to leave
+// available for the next item.
+check('the paste strip stays available', shown('.pc-paste-wrap'));
+check('and empties itself once read', ($('.pc-paste') as HTMLTextAreaElement).value === '');
 check('item header takes its place', shown('.pc-item'));
 check('names the item', /Rune Loop/.test(text()));
 check('raw copy text is gone', !/Item Class:/.test(text()));
@@ -152,7 +155,7 @@ check('the filters stay open alongside results', shown('.pc-filter-list'));
 const firstCard = $('.pc-card') as HTMLElement;
 const cardText = () => String(firstCard.textContent).replace(/\s+/g, ' ');
 check('the item is named', /Dusk Turn/.test(cardText()), cardText());
-check('with its base and level', /Prismatic Ring/.test(cardText()) && /Level: 39/.test(cardText()), cardText());
+check('with its base and level', /Prismatic Ring/.test(cardText()) && /Requires Level 39/.test(cardText()), cardText());
 check('the implicit is shown', /\+10% to all Elemental Resistances/.test(cardText()), cardText());
 check('and every explicit', /\+43 to Evasion Rating/.test(cardText()) && /\+82 to maximum Life/.test(cardText()), cardText());
 check('no leftover link markup', !/[[\]|]/.test(cardText()), cardText());
@@ -165,10 +168,26 @@ check('affix tiers are badged', tiers.map((n) => n.textContent).join(',') === 'P
 check('prefixes are marked as prefixes', tiers.every((n) => n.className.includes('prefix')), tiers.map((n) => n.className).join('|'));
 check('roll ranges are shown', /39–51/.test(cardText()) && /70–84/.test(cardText()), cardText());
 
+
+// ── properties and requirements ─────────────────────────────────────────────
+const boots = $$('.pc-card')[1] as HTMLElement;
+const bootsText = String(boots.textContent).replace(/\s+/g, ' ');
+check('property names are unwrapped', /Energy Shield: 37/.test(bootsText), bootsText);
+check('so are requirement names', /56 Str/.test(bootsText) && /56 Int/.test(bootsText), bootsText);
+check('no link markup survives anywhere', !/[[\]|]/.test(bootsText), bootsText);
+check('properties read as a list', /Boots · Armour: 134 · Energy Shield: 37/.test(bootsText), bootsText);
+check('requirements read as the game phrases them', /Requires Level 75, 56 Str, 56 Int/.test(bootsText), bootsText);
+
 // Price, seller and age sit together on the card's right.
 check('the price is on the card', !!$('.pc-card .pc-price'), 'no price');
 check('so is the seller', /AfkAlchemist/.test(cardText()), cardText());
-check('and how long it has been listed', /20h/.test(cardText()), cardText());
+// Ages are relative to now, so assert the shape rather than a value that goes
+// stale the moment the fixture does.
+check(
+  'and how long it has been listed',
+  /^[0-9]+(m|h|d|mo)$/.test(String($('.pc-card-age')?.textContent).trim()),
+  String($('.pc-card-age')?.textContent),
+);
 const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
 check('afk seller shows as afk', dots[0] === 'afk', dots.join(','));
 check('online seller shows as online', dots[1] === 'online', dots.join(','));
@@ -250,9 +269,13 @@ check('changing league clears stale listings', $$('.pc-tr').length === 0);
 check('and the footer follows', /HC Runes of Aldur/.test(text()), text().slice(0, 160));
 
 
-click($$('.pc-link').find((n) => String(n.textContent).includes('Change item')));
+// Clear drops the item, its filters and its results in one go.
+click($$('.pc-link').find((n) => String(n.textContent).includes('Clear')));
 await settle();
-check('“Change item” reopens the paste box', shown('.pc-paste-wrap'));
+check('Clear removes the item', !shown('.pc-item'));
+check('and its filters', $$('.pc-filter').length === 0, `${$$('.pc-filter').length} rows left`);
+check('and its listings', $$('.pc-card').length === 0, `${$$('.pc-card').length} cards left`);
+check('leaving the paste strip ready', shown('.pc-paste-wrap'));
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);

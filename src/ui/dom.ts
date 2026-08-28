@@ -41,8 +41,11 @@ export const CSS = `
   .pc-link:hover { color:var(--c-primary); }
 
   /* ── input ───────────────────────────────────────────────────────────── */
-  .pc-paste { width:100%; box-sizing:border-box; min-height:70px; resize:vertical;
-    font:10.5px/1.4 "JetBrains Mono",Consolas,monospace; }
+  .pc-paste { width:100%; box-sizing:border-box; height:26px; min-height:26px; resize:none;
+    overflow:hidden; white-space:nowrap; font:11px/1.35 system-ui,sans-serif;
+    border-style:dashed; cursor:text; }
+  .pc-paste:focus { border-style:solid; border-color:rgba(237,230,213,.5); outline:none; }
+  .pc-paste::placeholder { color:var(--c-accent); }
   .pc-hint { font-size:10px; color:var(--c-accent); }
 
   /* ── item header ─────────────────────────────────────────────────────── */
@@ -66,12 +69,17 @@ export const CSS = `
 
   /* ── filters ─────────────────────────────────────────────────────────── */
   .pc-filters { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; }
-  .pc-filters-head { display:flex; align-items:center; gap:6px; padding:3px 0; }
-  .pc-filters-title { font-size:10px; font-weight:700; letter-spacing:.07em;
-    text-transform:uppercase; color:var(--c-accent); background:none; border:none; padding:0;
-    cursor:pointer; }
-  .pc-filters-title:hover { color:var(--c-primary); }
-  .pc-filters-count { font-size:10px; color:var(--c-accent); }
+  .pc-filters-head { display:flex; align-items:center; gap:6px; }
+  .pc .pc-filters-title { display:flex; align-items:center; gap:6px; width:100%;
+    background:rgba(167,154,133,.07); border:1px solid rgba(167,154,133,.22);
+    padding:3px 7px; font-size:10px; font-weight:700; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--c-accent); cursor:pointer; text-align:left; }
+  .pc .pc-filters-title:hover { color:var(--c-primary); border-color:rgba(237,230,213,.4);
+    background:rgba(167,154,133,.13); }
+  .pc-caret { display:inline-block; transition:transform .12s ease; font-size:9px; }
+  .pc-filters-title.open .pc-caret { transform:rotate(90deg); }
+  .pc-filters-count { margin-left:auto; font-size:10px; font-weight:400; letter-spacing:0;
+    text-transform:none; color:var(--c-accent); }
   .pc-filter-list { flex:1 1 auto; min-height:0; overflow-y:auto;
     border:1px solid rgba(167,154,133,.18); }
   .pc-section { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
@@ -106,6 +114,7 @@ export const CSS = `
   .pc-count { font-size:10px; color:var(--c-accent); }
   .pc-sorts { margin-left:auto; display:flex; gap:3px; }
   .pc .pc-sort { background:none; border:1px solid transparent; padding:2px 6px;
+    min-width:58px; text-align:center;
     font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
     color:var(--c-accent); cursor:pointer; }
   .pc .pc-sort:hover { color:var(--c-primary); border-color:rgba(167,154,133,.3); }
@@ -115,19 +124,19 @@ export const CSS = `
   .pc-cards { display:flex; flex-direction:column; gap:5px; padding-bottom:4px; }
   .pc-card { border:1px solid rgba(167,154,133,.2); background:rgba(167,154,133,.04); }
   .pc-card:hover { border-color:rgba(167,154,133,.34); }
-  .pc-card-body { display:grid; grid-template-columns:minmax(0,1fr) 118px; }
+  .pc-card-body { display:grid; grid-template-columns:minmax(0,1fr) 132px; }
   .pc-card-item { padding:6px 8px; min-width:0; }
   .pc-card-side { padding:6px 8px; display:flex; flex-direction:column; align-items:flex-end;
     gap:1px; border-left:1px solid rgba(167,154,133,.14); text-align:right; }
-  .pc-price { display:flex; align-items:center; gap:3px; font-weight:700; font-size:13px;
+  .pc-price { display:flex; align-items:center; gap:4px; font-weight:700; font-size:15px;
     font-variant-numeric:tabular-nums; color:var(--c-primary); }
-  .pc-cur { width:17px; height:17px; object-fit:contain; }
+  .pc-cur { width:19px; height:19px; object-fit:contain; }
   .pc-cur-text { font-size:10px; font-weight:400; color:var(--c-accent); }
-  .pc-norm { font-size:10px; color:var(--c-accent); font-variant-numeric:tabular-nums; }
-  .pc-card-seller { font-size:10px; color:var(--c-accent); max-width:100%;
+  .pc-norm { font-size:11px; color:var(--c-accent); font-variant-numeric:tabular-nums; }
+  .pc-card-seller { font-size:11px; color:var(--c-accent); max-width:100%;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
-  .pc-card-age { font-size:10px; color:var(--c-accent); opacity:.8; }
-  .pc-card-icon { width:30px; height:30px; object-fit:contain; margin-top:2px; }
+  .pc-card-age { font-size:10.5px; color:var(--c-accent); opacity:.8; }
+  .pc-card-icon { width:34px; height:34px; object-fit:contain; margin-top:3px; }
   .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; }
   .pc-dot.online { background:#5fa372; }
   .pc-dot.afk { background:#d9a441; }

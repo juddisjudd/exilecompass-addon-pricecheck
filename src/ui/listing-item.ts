@@ -12,9 +12,27 @@ export function cleanDescription(text: string): string {
   );
 }
 
+/**
+ * `{name: "[EnergyShield|Energy Shield]", values: [["37", 0]]}` -> `Energy
+ * Shield: 37`. The names carry the same link markup the mod descriptions do,
+ * which is easy to miss because only the mods were being unwrapped.
+ */
 function lineText(line: ListingLine): string {
+  const name = cleanDescription(line.name);
   const values = (line.values ?? []).map(([text]) => text).filter(Boolean);
-  return values.length ? `${line.name}: ${values.join(', ')}` : line.name;
+  return values.length ? `${name}: ${values.join(', ')}` : name;
+}
+
+/** `Requires Level 75, 56 Str` — the game's phrasing, not a list of pairs. */
+function requirementsText(lines: ListingLine[]): string {
+  const parts = lines.map((line) => {
+    const name = cleanDescription(line.name);
+    const value = (line.values ?? []).map(([text]) => text).join(', ');
+    if (!value) return name;
+    // "Level: 75" reads as "Level 75"; everything else is "56 Str".
+    return name.toLowerCase() === 'level' ? `Level ${value}` : `${value} ${name}`;
+  });
+  return parts.length ? `Requires ${parts.join(', ')}` : '';
 }
 
 /** `39–51`, the range this roll came out of. */
@@ -84,10 +102,12 @@ export function renderListingItem(container: HTMLElement, listing: Listing): voi
   if (item.corrupted) head.append(el('span', 'pc-flag', 'corrupted'));
   container.append(head);
 
-  const facts = [...(item.properties ?? []), ...(item.requirements ?? [])]
-    .map(lineText)
-    .filter(Boolean);
-  if (facts.length) container.append(el('div', 'pc-detail-facts', facts.join('  •  ')));
+  const properties = (item.properties ?? []).map(lineText).filter(Boolean);
+  if (properties.length) {
+    container.append(el('div', 'pc-detail-facts', properties.join('  ·  ')));
+  }
+  const requires = requirementsText(item.requirements ?? []);
+  if (requires) container.append(el('div', 'pc-detail-facts', requires));
 
   const groups: Array<[string, ListingMod[] | undefined]> = [
     ['enchant', item.enchantMods],

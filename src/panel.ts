@@ -33,6 +33,13 @@ interface Settings {
    * league id: ids change every league, the choice does not (PLAN.md §2.1).
    */
   mode: LeagueMode;
+  /**
+   * Which listings the API returns. No longer a control: PoE2 sells through
+   * in-game asynchronous offers, so whether the seller happens to be logged in
+   * says nothing about whether you can buy it. Left at the trade site's own
+   * default rather than widened to `any`, which would let long-abandoned
+   * listings set the price.
+   */
   status: string;
   sort: SortKey;
   /** Which currency prices are restated in — exalted or chaos, per EE2. */
@@ -58,8 +65,6 @@ interface State {
   status: string;
   error: string;
   busy: boolean;
-  /** The paste box is only in the way once an item has been read from it. */
-  pasteOpen: boolean;
   filtersOpen: boolean;
   localSort: SortState;
   currencies: CurrencyIndex | null;
@@ -95,7 +100,6 @@ const mount: MountFn = async ({ root, host }) => {
     status: '',
     error: '',
     busy: false,
-    pasteOpen: true,
     filtersOpen: true,
     localSort: { column: 'none', descending: false },
     currencies: null,
@@ -122,10 +126,15 @@ const mount: MountFn = async ({ root, host }) => {
 
   const panes = el('div', 'pc-panes');
   const side = el('div', 'pc-side');
+  // A one-line drop target rather than a text box: nobody types item text, they
+  // paste it, and a tall empty box was taking space the filters and listings
+  // both wanted. Still a real textarea, so Ctrl+V works without the clipboard
+  // permission the sandbox does not have.
   const pasteWrap = el('div', 'pc-paste-wrap');
   const paste = el('textarea', 'pc-paste');
-  paste.placeholder = 'Copy an item in game with Ctrl+C (hold Alt for mod tiers) and paste it here.';
+  paste.placeholder = 'Click here, then Ctrl+V to paste a copied item';
   paste.spellcheck = false;
+  paste.rows = 1;
   pasteWrap.append(paste);
   const itemHead = el('div', 'pc-item');
   const filters = el('div', 'pc-filters');
@@ -231,7 +240,6 @@ const mount: MountFn = async ({ root, host }) => {
       state.unmatched = match.unmatched;
       state.status = '';
       // The text has done its job; hand the space to the filters and prices.
-      state.pasteOpen = false;
       paste.value = '';
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
@@ -299,24 +307,6 @@ const mount: MountFn = async ({ root, host }) => {
       toggle.append(button);
     });
 
-    const status = el('select');
-    status.title = 'Which listings to include';
-    for (const [value, label] of [
-      ['online', 'Online'],
-      ['onlineleague', 'Online in league'],
-      ['any', 'Any'],
-    ]) {
-      const option = el('option');
-      option.value = value;
-      option.textContent = label;
-      status.append(option);
-    }
-    status.value = state.settings.status;
-    status.addEventListener('change', () => {
-      state.settings.status = status.value;
-      void saveSettings();
-    });
-
     const sort = el('select');
     sort.title = 'What the search asks the API for';
     for (const entry of SORTS) {
@@ -351,7 +341,7 @@ const mount: MountFn = async ({ root, host }) => {
       core.append(button);
     }
 
-    bar.append(toggle, status, sort, el('div', 'pc-status', state.status));
+    bar.append(toggle, sort, el('div', 'pc-status', state.status));
     if (cores.length > 1) bar.append(core);
   }
 
@@ -389,15 +379,17 @@ const mount: MountFn = async ({ root, host }) => {
       );
     }
   }
-
   function renderItem(): void {
-    pasteWrap.style.display = state.pasteOpen ? '' : 'none';
-    itemHead.style.display = state.item && !state.pasteOpen ? '' : 'none';
-    if (!state.item || state.pasteOpen) return;
+    itemHead.style.display = state.item ? '' : 'none';
+    if (!state.item) return;
     renderItemHeader(itemHead, {
       item: state.item,
-      onChange: () => {
-        state.pasteOpen = true;
+      onClear: () => {
+        state.item = null;
+        state.rows = [];
+        state.unmatched = [];
+        state.error = '';
+        resetResults();
         render();
         paste.focus();
       },
@@ -407,32 +399,41 @@ const mount: MountFn = async ({ root, host }) => {
   function renderFilterBlock(): void {
     filters.style.display = state.rows.length ? '' : 'none';
     filtersHead.replaceChildren();
-    if (!state.rows.length) return;
+    if (!state.rows.length) {
+      // Hiding the container is not enough — the old rows stay in the DOM and
+      // would flash back the next time it is shown.
+      filterList.replaceChildren();
+      return;
+    }
 
     const enabled = state.rows.filter((row) => row.enabled).length;
-    const title = el('button', 'pc-filters-title', `${state.filtersOpen ? '▾' : '▸'} Filters`);
+    // The whole strip is the control, with a caret that turns — a bare "▸
+    // Filters" label did not read as something you could press.
+    const title = el('button', `pc-filters-title${state.filtersOpen ? ' open' : ''}`);
     title.type = 'button';
+    title.setAttribute('aria-expanded', state.filtersOpen ? 'true' : 'false');
+    title.title = state.filtersOpen ? 'Hide the filters' : 'Show the filters';
+    title.append(
+      el('span', 'pc-caret', '▸'),
+      el('span', undefined, 'Filters'),
+      el('span', 'pc-filters-count', `${enabled} of ${state.rows.length} active`),
+    );
     title.addEventListener('click', () => {
       state.filtersOpen = !state.filtersOpen;
       render();
     });
-    filtersHead.append(
-      title,
-      el('span', 'pc-filters-count', `${enabled} of ${state.rows.length} active`),
-    );
+    filtersHead.append(title);
 
     filterList.style.display = state.filtersOpen ? '' : 'none';
     if (!state.filtersOpen) return;
     renderFilters(filterList, {
       rows: state.rows,
       onChange: () => {
-        // Only the count in the header depends on this; redrawing the list
-        // would steal focus from the number input being typed into.
+        // Only the count depends on this; redrawing the list would steal focus
+        // from the number input being typed into.
         const active = state.rows.filter((row) => row.enabled).length;
-        filtersHead.replaceChildren(
-          title,
-          el('span', 'pc-filters-count', `${active} of ${state.rows.length} active`),
-        );
+        const count = title.querySelector('.pc-filters-count');
+        if (count) count.textContent = `${active} of ${state.rows.length} active`;
       },
     });
   }

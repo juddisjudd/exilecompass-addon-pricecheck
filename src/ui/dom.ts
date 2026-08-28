@@ -160,7 +160,30 @@ export const CSS = `
     font-variant-numeric:tabular-nums; }
   .pc-affix.prefix { color:#ec7676; }
   .pc-affix.suffix { color:#7aaff1; }
-  .pc-compare { padding:1px 0; text-align:center; font-size:11px; }
+  /* Scrollbars, kept out of the way. WebView2 is Chromium, so the ::-webkit
+     rules are the ones that apply; scrollbar-width is there for anything else.
+     Not hidden outright — a list that scrolls with no sign it scrolls is worse
+     than a thin bar. */
+  .pc-results, .pc-filter-list, .pc-paste {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(167,154,133,.3) transparent;
+  }
+  .pc-results::-webkit-scrollbar,
+  .pc-filter-list::-webkit-scrollbar { width:6px; height:6px; }
+  .pc-results::-webkit-scrollbar-track,
+  .pc-filter-list::-webkit-scrollbar-track { background:transparent; }
+  .pc-results::-webkit-scrollbar-thumb,
+  .pc-filter-list::-webkit-scrollbar-thumb {
+    background:rgba(167,154,133,.25); border-radius:3px;
+  }
+  .pc-results:hover::-webkit-scrollbar-thumb,
+  .pc-filter-list:hover::-webkit-scrollbar-thumb { background:rgba(167,154,133,.45); }
+  .pc-results::-webkit-scrollbar-corner,
+  .pc-filter-list::-webkit-scrollbar-corner { background:transparent; }
+
+  .pc .pc-compare { padding:1px 0; text-align:center; font-size:12px; line-height:1.1;
+    color:var(--c-accent); background:#121214; cursor:pointer; }
+  .pc .pc-compare:hover { color:var(--c-primary); border-color:rgba(237,230,213,.5); }
   .pc-mod-kind { flex:0 0 auto; font-size:9px; letter-spacing:.05em; text-transform:uppercase;
     color:var(--c-accent); opacity:.85; border:1px solid rgba(167,154,133,.28); padding:0 3px; }
   .pc-mod.desecrated .pc-mod-text { color:#c78ee0; }

@@ -98,7 +98,7 @@ export function buildStatFilters(match: MatchResult): StatFilterRow[] {
     return {
       kind: 'stat',
       key: `stat-${i}-${m.entry.id}`,
-      comparison: 'min',
+      comparison: 'range',
       statId: m.entry.id,
       label: line.text,
       rolled,
@@ -128,7 +128,7 @@ export function buildEquipmentFilters(item: ParsedItem): EquipmentFilterRow[] {
     rows.push({
       kind: 'equipment',
       key: `eq-${field}`,
-      comparison: 'min',
+      comparison: 'range',
       field,
       label,
       rolled: rounded,

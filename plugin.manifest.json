@@ -5,7 +5,7 @@
   "description": "Price check PoE2 items against the official trade API: paste an item, pick your filters, see what it sells for.",
   "author": "Judd",
   "homepage": "https://github.com/juddisjudd/exilecompass-addon-pricecheck",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "kind": "addon",
   "entry": {
     "panel": "./dist/panel.js",

@@ -292,28 +292,33 @@ check('and the footer follows', /HC Runes of Aldur/.test(text()), text().slice(0
 // The API only takes {min, max}, so these are four readings of the same two
 // boxes — but "at least 33" and "exactly 33" are different searches.
 const firstFilter = $('.pc-filter') as HTMLElement;
-const compare = firstFilter.querySelector('.pc-compare') as HTMLSelectElement;
-check('every filter row offers a comparison', !!compare, 'no comparison select');
-check('with four modes', compare.options.length === 4, `${compare.options.length}`);
-check('symbols, not words', [...compare.options].map((o) => o.value).join(','), 'min,max,exact,range');
-check('defaulting to at-least', compare.value === 'min', compare.value);
+const compare = firstFilter.querySelector('.pc-compare') as HTMLButtonElement;
+check('every filter row offers a comparison', !!compare, 'no comparison control');
+check('as a button, not a dropdown', compare.tagName === 'BUTTON', compare.tagName);
 
 const numbers = () => [...firstFilter.querySelectorAll('input[type=number]')] as HTMLElement[];
-check('at-least shows only the min box', numbers()[1].style.display === 'none');
+check('defaulting to between', compare.textContent === '⇔', String(compare.textContent));
+check('which shows both boxes', numbers().every((n) => n.style.display !== 'none'));
 
-compare.value = 'range';
-compare.dispatchEvent(new win.Event('change', { bubbles: true }));
-await settle();
-check('between shows both boxes', numbers().every((n) => n.style.display !== 'none'));
+// Clicking cycles, and the tooltip carries the meaning a symbol alone cannot.
+const seen: string[] = [];
+for (let i = 0; i < 4; i += 1) {
+  click(compare);
+  await settle(20);
+  seen.push(String(compare.textContent));
+}
+check('clicking cycles through all four', seen.join(''), '≥≤=⇔');
+check('and returns to where it started', compare.textContent === '⇔');
+check('the tooltip names the mode', /click to change/.test(compare.title), compare.title);
 
-compare.value = 'max';
-compare.dispatchEvent(new win.Event('change', { bubbles: true }));
-await settle();
-check('at-most shows only the max box', numbers()[0].style.display === 'none');
-
-compare.value = 'exact';
-compare.dispatchEvent(new win.Event('change', { bubbles: true }));
-await settle();
+click(compare);
+await settle(20);
+check('at-least hides the max box', numbers()[1].style.display === 'none');
+click(compare);
+await settle(20);
+check('at-most hides the min box instead', numbers()[0].style.display === 'none');
+click(compare);
+await settle(20);
 check('exactly relabels the single box', (numbers()[0] as HTMLInputElement).placeholder === 'value');
 
 // Clear drops the item, its filters and its results in one go.

@@ -708,6 +708,18 @@ same two fields, but "at least 33" and "exactly 33" are different questions and
 an empty box is a poor way to ask either. `bounds()` in `stats/filters.ts` is
 the single place that maps a comparison onto the pair.
 
+It is a button that cycles rather than a select: the row is narrow, and a
+dropdown showing one glyph costs more width than the numbers beside it. It
+defaults to **between**, which is what the rows looked like before comparisons
+existed — a prefilled min and an open max — so the default search is unchanged
+and the other three modes are opt-in.
+
+Scrollbars in the listings and the filter list are thinned rather than hidden:
+6px, transparent track, a thumb that darkens on hover. Measured in the real
+engine they are overlay-drawn and take 0px of layout width. Hiding them
+outright was the other option and is worse — a list that scrolls with no sign
+that it scrolls.
+
 **Currency is shown as an icon, not a word.** `/data/static` publishes a name
 and image for every currency, keyed by exactly the id a listing's
 `price.currency` carries, so there is nothing to bundle or map by hand — Sidekick

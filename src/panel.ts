@@ -9,7 +9,14 @@ import {
   type LeagueMode,
   type LeaguePair,
 } from './trade/league';
-import { CurrencyIndex, loadCurrencies, loadRates, type Rates } from './trade/currency';
+import {
+  abbreviate,
+  CORE_CURRENCIES,
+  CurrencyIndex,
+  loadCurrencies,
+  loadRates,
+  type Rates,
+} from './trade/currency';
 import { buildQuery } from './trade/query';
 import { search, searchUrl, sortFor, SORTS, type Listing, type SortKey } from './trade/search';
 import { CSS, el } from './ui/dom';
@@ -28,15 +35,15 @@ interface Settings {
   mode: LeagueMode;
   status: string;
   sort: SortKey;
-  /** Currency to show prices in, or `listed` to keep each seller's own. */
-  display: string;
+  /** Which currency prices are restated in — exalted or chaos, per EE2. */
+  core: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   mode: 'sc',
   status: 'online',
   sort: 'price-asc',
-  display: 'listed',
+  core: CORE_CURRENCIES[0],
 };
 
 interface State {
@@ -169,10 +176,10 @@ const mount: MountFn = async ({ root, host }) => {
     }
     const league = currentLeague();
     if (league && !state.rates) state.rates = await loadRates(host, league);
-    if (state.settings.display !== 'listed' && !state.rates) {
-      state.settings.display = 'listed';
-      state.error = 'Could not reach poe.ninja for exchange rates — showing prices as listed.';
-    }
+    // A core the economy has no rate for (or a value left by an older
+    // version of this add-on) falls back to the first one it does.
+    const cores = state.rates?.cores() ?? [];
+    if (cores.length && !cores.includes(state.settings.core)) state.settings.core = cores[0];
   }
 
   function currentLeague(): string | null {
@@ -315,34 +322,32 @@ const mount: MountFn = async ({ root, host }) => {
       if (state.listings.length) void runSearch();
     });
 
-    // Only offered once rates are in hand — a converter with no rates is a
-    // control that silently does nothing.
-    const display = el('select');
-    display.title = 'Currency to show prices in';
-    const options: Array<[string, string]> = [['listed', 'As listed']];
-    for (const id of state.rates?.targets() ?? []) {
-      options.push([id, `in ${state.currencies?.get(id).name ?? id}`]);
+    // Exiled Exchange 2 offers exactly two core currencies as radio buttons;
+    // divine is not among them because `normalize` promotes to divines on its
+    // own once a price is worth one. Hidden entirely without rates — a
+    // converter with nothing to convert by is a control that does nothing.
+    const cores = state.rates?.cores() ?? [];
+    const core = el('div', 'pc-toggle');
+    for (const id of cores) {
+      const button = el('button', state.settings.core === id ? 'on' : undefined);
+      button.type = 'button';
+      button.textContent = abbreviate(id).toUpperCase();
+      button.title = `Show prices in ${state.currencies?.get(id).name ?? id}`;
+      button.addEventListener('click', () => {
+        state.settings.core = id;
+        void saveSettings();
+        render();
+      });
+      core.append(button);
     }
-    for (const [value, label] of options) {
-      const option = el('option');
-      option.value = value;
-      option.textContent = label;
-      display.append(option);
-    }
-    display.value = state.settings.display;
-    display.disabled = options.length === 1;
-    display.addEventListener('change', () => {
-      state.settings.display = display.value;
-      void saveSettings();
-      renderList();
-    });
 
     const go = el('button', 'pc-primary', state.busy ? 'Searching…' : 'Price check');
     go.type = 'button';
     go.disabled = state.busy || !state.item || !state.leagues;
     go.addEventListener('click', () => void runSearch());
 
-    bar.append(toggle, status, sort, display, go, el('div', 'pc-status', state.status));
+    bar.append(toggle, status, sort, go, el('div', 'pc-status', state.status));
+    if (cores.length > 1) bar.insertBefore(core, go);
   }
 
   function renderNotice(): void {
@@ -462,7 +467,7 @@ const mount: MountFn = async ({ root, host }) => {
       },
       currencies: state.currencies,
       rates: state.rates,
-      display: state.settings.display,
+      core: state.settings.core,
       onWhisper: () => {
         // Hand focus back so the whisper can be pasted straight into chat.
         void host.game?.get();

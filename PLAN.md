@@ -630,15 +630,27 @@ to hundreds of thousands of exalted for a mirror, so small values keep two
 decimals and large ones become `1.5k` / `1.2m`.
 
 **Converting between currencies needs a rate source, and GGG does not publish
-one.** EE2 normalizes against poe.ninja's currency exchange and lets the user
-pick a "core currency" (`Prices.ts`, `autoCurrency`); Sidekick does not convert
-at all. We follow EE2's source: poe.ninja's PoE2 exchange overview gives every
-currency's worth in divines, under ids that match GGG's. That costs one extra
-permission (`network.fetch:poe.ninja`), cached for an hour through
-`net.fetchCached`, and it is entirely optional — the "Prices in" select offers
-"As listed" plus whatever the rate table actually covers, and falls back to "As
-listed" whenever poe.ninja cannot be reached. A missing rate yields `null`, never
-a guessed conversion.
+one.** Sidekick does not convert at all. Exiled Exchange 2 does, and its model
+is the one followed here (`Prices.ts`, `pathofexile-trade.ts`, `TradeItem.vue`):
+
+- the player picks a **core currency**, and the choice is exactly two wide —
+  `xchgRateCurrency` is typed `"chaos" | "exalted"`, rendered as radio buttons;
+- **divine is not one of the choices.** It appears on its own once a price is
+  worth about one (`autoCurrency`), because that is the unit anyone would quote
+  at that value. Offering divine as a core as well would be a second way to say
+  the same thing;
+- the listing keeps **its own asking price**, and the restatement is appended in
+  parentheses — `5 [ex icon] (0.14 c)`. That price is what you whisper for, so
+  substituting it would be actively unhelpful;
+- nothing is appended when it would say nothing: a listing already in the core
+  currency, or a divine price that would restate as divine.
+
+Rates come from poe.ninja's PoE2 exchange overview, which gives every currency's
+worth in divines under ids that match GGG's. That costs one extra permission
+(`network.fetch:poe.ninja`), cached for an hour through `net.fetchCached`. When
+poe.ninja cannot be reached the core toggle is simply not rendered and prices
+stay exactly as listed. A missing rate yields `null`, never a guessed
+conversion.
 
 `account.online` is an **object** (`{league, status}`), absent when the seller is
 offline and carrying `status: "afk"` when they are away — not a boolean. Reading

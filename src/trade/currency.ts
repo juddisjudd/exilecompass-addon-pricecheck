@@ -53,6 +53,23 @@ interface NinjaOverview {
   lines?: Array<{ id: string; primaryValue?: number }>;
 }
 
+/** Short forms for the parenthetical, where the full name will not fit. */
+const ABBREV: Record<string, string> = { divine: 'div', exalted: 'ex', chaos: 'c' };
+
+export function abbreviate(id: string): string {
+  return ABBREV[id] ?? id;
+}
+
+/** The currencies offered as a core, in Exiled Exchange 2's own order. */
+export const CORE_CURRENCIES = ['exalted', 'chaos'];
+
+export const DIVINE = 'divine';
+
+export interface NormalizedPrice {
+  amount: number;
+  currency: string;
+}
+
 /**
  * How many divines one of each currency is worth, from poe.ninja — the same
  * source Exiled Exchange 2 normalizes against. GGG's own API does not publish
@@ -80,10 +97,9 @@ export class Rates {
     return this.perUnit.size > 1;
   }
 
-  /** Currencies worth offering as a display unit, most valuable first. */
-  targets(): string[] {
-    const wanted = [this.base, 'divine', 'exalted', 'chaos'];
-    return [...new Set(wanted)].filter((id) => this.perUnit.has(id));
+  /** Which core currencies this economy actually publishes a rate for. */
+  cores(): string[] {
+    return CORE_CURRENCIES.filter((id) => this.perUnit.has(id));
   }
 
   /** null when either side has no published rate — never a guessed number. */
@@ -93,6 +109,27 @@ export class Rates {
     const target = this.perUnit.get(to);
     if (!source || !target) return null;
     return (amount * source) / target;
+  }
+
+  /**
+   * A listing's price restated in the player's core currency — except once it
+   * is worth a divine or more, when divines are the unit anyone would actually
+   * quote. Exiled Exchange 2 does the same (`autoCurrency` in `Prices.ts`),
+   * and it is why the core setting is a two-way exalted/chaos choice rather
+   * than a list including divine: divine arrives on its own when it is
+   * warranted.
+   *
+   * Returns null when there is nothing worth saying — no rate, or the listing
+   * is already in the currency we would restate it in.
+   */
+  normalize(amount: number, from: string, core: string): NormalizedPrice | null {
+    const inDivine = this.convert(amount, from, DIVINE);
+    if (inDivine !== null && inDivine >= 1) {
+      return from === DIVINE ? null : { amount: inDivine, currency: DIVINE };
+    }
+    if (from === core) return null;
+    const value = this.convert(amount, from, core);
+    return value === null ? null : { amount: value, currency: core };
   }
 }
 

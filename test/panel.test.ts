@@ -185,29 +185,38 @@ check(
   ($('.pc-td.price') as HTMLElement).title,
 );
 const amounts = () => $$('.pc-amount').map((n) => String(n.textContent).trim());
-check('amounts render as listed', amounts().includes('1') && amounts().includes('5'), amounts().join(','));
+check(
+  'the asking price stays primary',
+  amounts().includes('1') && amounts().includes('5'),
+  amounts().join(','),
+);
 
-// Switch the display currency; the listings convert without another search.
-const display = $$('select')[2] as HTMLSelectElement;
-const displayOptions = [...display.options].map((o) => o.value);
-check('offers "as listed" plus real currencies', displayOptions[0] === 'listed', displayOptions.join(','));
-check('offers divine', displayOptions.includes('divine'), displayOptions.join(','));
-check('offers chaos', displayOptions.includes('chaos'), displayOptions.join(','));
+// The conversion is appended, not substituted — you whisper for the asking
+// price, so that is the number that has to stay readable. And a listing
+// already in your core currency has nothing to restate, which is why these
+// fixtures (all priced in exalted, the default core) show no parenthetical.
+const norms = () => $$('.pc-norm').map((n) => String(n.textContent).trim());
+check('no redundant conversion for the core currency', norms().length === 0, norms().join(' '));
+
+// Switching the core currency restates them all, with no further API call.
+const cores = $$('.pc-toggle')[1];
+check('a core toggle is offered', !!cores, 'no toggle rendered');
+const coreButtons = [...cores.children] as HTMLElement[];
+check('with exactly two options, as in EE2', coreButtons.length === 2, `${coreButtons.length}`);
+check('labelled by abbreviation', coreButtons.map((b) => b.textContent).join(','), 'EX,C');
 
 const searchesBefore = searchCount;
-display.value = 'divine';
-display.dispatchEvent(new win.Event('change', { bubbles: true }));
+click(coreButtons[1]);
 await settle(120);
 
-check('converting costs no API call', searchCount === searchesBefore, `count=${searchCount}`);
-// 1 exalted is 0.002695 divine, which must not collapse to "0".
-check('sub-unit conversions keep precision', amounts().includes('0.003'), amounts().join(','));
-check(
-  'the original price is kept in the tooltip',
-  ($('.pc-td.price') as HTMLElement).title.includes('listed as 1 exalted'),
-  ($('.pc-td.price') as HTMLElement).title,
-);
-check('the setting persists', JSON.parse(store.get('settings.v1') ?? '{}').display === 'divine');
+check('switching core costs no API call', searchCount === searchesBefore, `count=${searchCount}`);
+check('every listing now carries a conversion', norms().length === 3, norms().join(' '));
+check('shown in parentheses', norms().every((t) => t.startsWith('(') && t.endsWith(')')), norms().join(' '));
+check('restated in chaos', norms().every((t) => t.endsWith('c)')), norms().join(' '));
+// 1 exalted is 0.0288 chaos here; it must not collapse to "0".
+check('sub-unit conversions keep precision', norms().some((t) => /0\.0/.test(t)), norms().join(' '));
+check('never a raw float', !norms().some((t) => /\.\d{3,}/.test(t)), norms().join(' '));
+check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').core === 'chaos');
 
 // Switching league must not leave the other market's prices on screen.
 click($$('.pc-toggle button')[1]);

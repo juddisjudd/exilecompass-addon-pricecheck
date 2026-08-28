@@ -1,5 +1,5 @@
 // Run with: bun test/currency.test.ts
-import { CurrencyIndex, POE_CDN, Rates } from '../src/trade/currency';
+import { abbreviate, CurrencyIndex, POE_CDN, Rates } from '../src/trade/currency';
 import { formatAmount } from '../src/ui/format';
 
 let failures = 0;
@@ -80,14 +80,35 @@ check('unknown source is null, never a guess', rates.convert(5, 'mystery', 'divi
 check('unknown target is null', rates.convert(5, 'divine', 'mystery'), null);
 check('a zero rate is not usable', rates.convert(5, 'broken', 'divine'), null);
 
-const targets = rates.targets();
-check('offers the base first', targets[0], 'divine');
+const targets = rates.cores();
 check('offers exalted', targets.includes('exalted'), true);
 check('offers chaos', targets.includes('chaos'), true);
-// The shortlist is the currencies people actually price in, not everything
-// with a published rate.
-check('does not offer every currency it knows', targets.includes('annul'), false);
-check('no duplicate targets', targets.length, new Set(targets).size);
+// Divine is never offered as a core: normalize() promotes to it by value, the
+// same way Exiled Exchange 2's autoCurrency does.
+check('does not offer divine as a core', targets.includes('divine'), false);
+check('nor anything else it knows a rate for', targets.includes('annul'), false);
+check('no duplicate cores', targets.length, new Set(targets).size);
+
+// ── normalization ───────────────────────────────────────────────────────────
+// 371 exalted is one divine, so anything at or above that quotes in divines.
+const cheap = rates.normalize(10, 'exalted', 'chaos');
+check('a cheap price restates in the core currency', cheap?.currency, 'chaos');
+check(
+  'with the converted amount',
+  Math.round(cheap!.amount * 100) / 100,
+  Math.round(((10 * 0.002695) / 0.09357) * 100) / 100,
+);
+
+const rich = rates.normalize(400, 'exalted', 'chaos');
+check('a price worth over a divine quotes in divines', rich?.currency, 'divine');
+check('rounded sensibly', Math.round(rich!.amount * 100) / 100, Math.round((400 * 0.002695) * 100) / 100);
+
+check('nothing to say when it is already the core', rates.normalize(5, 'chaos', 'chaos'), null);
+check('nor when a divine price would restate as divine', rates.normalize(3, 'divine', 'chaos'), null);
+check('an unknown currency yields nothing', rates.normalize(5, 'mystery', 'chaos'), null);
+
+check('abbreviations are short', `${abbreviate('divine')}/${abbreviate('exalted')}/${abbreviate('chaos')}`, 'div/ex/c');
+check('an unknown id abbreviates to itself', abbreviate('mystery'), 'mystery');
 
 const empty = new Rates({ lines: [] }, 'divine');
 check('an empty overview is not usable', empty.known, false);

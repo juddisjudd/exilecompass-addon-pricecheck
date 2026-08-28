@@ -1,7 +1,7 @@
 import type { AddonHost } from '../types';
 import type { ParsedItem } from '../parser/types';
 import { sellerStatus, type Listing } from '../trade/search';
-import type { CurrencyIndex, Rates } from '../trade/currency';
+import { abbreviate, type CurrencyIndex, type Rates } from '../trade/currency';
 import { copyText, el } from './dom';
 import { formatAmount } from './format';
 
@@ -31,10 +31,14 @@ function ago(iso: string | undefined): string {
 }
 
 /**
- * `5 × [divine icon]`, the way both reference tools show it — the icon is what
- * a player recognises, and the word "divine" costs a third of the column.
- * The full name and, when converted, the seller's original asking price live
- * in the tooltip.
+ * `5 [exalted icon]  (0.01 div)` — the seller's own asking price, shown with
+ * the currency's icon because that is what a player recognises, plus the same
+ * value restated in their core currency when that says something new.
+ *
+ * Both reference tools inform this: Sidekick renders `amount × [icon]` with the
+ * name in a tooltip, and Exiled Exchange 2 appends the normalized value in
+ * parentheses rather than replacing the asking price (`TradeItem.vue`). The
+ * asking price is what you will actually whisper for, so it stays primary.
  */
 function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOptions): void {
   const price = listing.price;
@@ -43,22 +47,8 @@ function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOption
     return;
   }
 
-  let amount = price.amount;
-  let currency = price.currency;
-  let converted = false;
-
-  const target = options.display;
-  if (target && target !== 'listed' && options.rates) {
-    const value = options.rates.convert(price.amount, price.currency, target);
-    if (value !== null) {
-      amount = value;
-      currency = target;
-      converted = true;
-    }
-  }
-
-  const meta = options.currencies?.get(currency);
-  cell.append(el('span', 'pc-amount', formatAmount(amount)));
+  const meta = options.currencies?.get(price.currency);
+  cell.append(el('span', 'pc-amount', formatAmount(price.amount)));
 
   if (meta?.icon && options.host.net?.fetchImage) {
     const img = el('img', 'pc-cur');
@@ -73,11 +63,21 @@ function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOption
       });
     cell.append(img);
   } else {
-    cell.append(el('span', 'pc-cur-text', currency));
+    cell.append(el('span', 'pc-cur-text', price.currency));
   }
 
-  const parts = [meta?.name ?? currency];
-  if (converted) parts.push(`listed as ${formatAmount(price.amount)} ${price.currency}`);
+  const normalized = options.rates?.normalize(price.amount, price.currency, options.core) ?? null;
+  if (normalized) {
+    cell.append(
+      el(
+        'span',
+        'pc-norm',
+        `(${formatAmount(normalized.amount)} ${abbreviate(normalized.currency)})`,
+      ),
+    );
+  }
+
+  const parts = [meta?.name ?? price.currency];
   if (price.type && price.type !== 'exact') parts.push(price.type);
   cell.title = parts.join(' — ');
 }
@@ -137,8 +137,8 @@ export interface ResultsOptions {
   currencies: CurrencyIndex | null;
   /** Exchange rates, when poe.ninja could be reached. */
   rates: Rates | null;
-  /** `listed` keeps each seller's own currency; anything else converts. */
-  display: string;
+  /** The player's core currency, which prices are restated in. */
+  core: string;
 }
 
 interface Column {

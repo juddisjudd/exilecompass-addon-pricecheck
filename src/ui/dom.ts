@@ -107,6 +107,7 @@ export const CSS = `
     display:flex; align-items:center; gap:3px; }
   .pc-cur { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
   .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; }
+  .pc-norm { color:var(--c-accent); font-weight:400; font-size:10px; }
   .pc-td.listed { color:var(--c-accent); font-variant-numeric:tabular-nums; }
   .pc-td.seller { color:var(--c-accent); }
   .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px;

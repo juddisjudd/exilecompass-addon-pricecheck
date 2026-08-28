@@ -624,6 +624,22 @@ from its right edge, and how long a listing has been up sits immediately left of
 it. The seller is a fixed narrow column rather than the row's flexible one —
 worth seeing, not worth a quarter of the row.
 
+
+**The listings are a real `<table>`**, fixed-layout, with a `<colgroup>` setting
+each column's width. They were CSS grid first, with the header and the rows as
+two separate grid containers sharing a `grid-template-columns` string — which
+does not work: each container resolves its own `auto` and `minmax` tracks
+against its own content, so a long mod line in one row widened that row's
+columns and nothing lined up with the header. One table means one layout
+algorithm for header and body together, and `table-layout: fixed` means content
+can never push a column around. The expanded item is a `<tr>` with a
+`colSpan`ned cell, so it inherits the same alignment.
+
+Sorting lives on a button that fills its header cell, with `aria-sort` on the
+`<th>`. The panel-wide `.pc button` rule has to be out-specified for it
+(`.pc .pc-sort`) — without that, the sort controls inherit the input chrome and
+the header reads as a row of text boxes rather than column labels.
+
 **There is no whisper button.** PoE2's in-game asynchronous trade offers are how
 people buy now, so a copied whisper is a step almost nobody takes. Removing it
 also removed the panel's only reason to touch the clipboard, and with it the

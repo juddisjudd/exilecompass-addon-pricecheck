@@ -87,48 +87,61 @@ export const CSS = `
   /* ── listings ────────────────────────────────────────────────────────── */
   .pc-results { flex:1 1 auto; min-height:0; overflow-y:auto;
     border:1px solid rgba(167,154,133,.18); }
-  .pc-table { display:flex; flex-direction:column; }
-  .pc-thead, .pc-tr { display:grid; grid-template-columns:var(--tracks); gap:6px;
-    align-items:center; padding:3px 7px; }
-  .pc-thead { position:sticky; top:0; z-index:1; background:#0e0d0c;
-    border-bottom:1px solid rgba(167,154,133,.24); }
-  .pc-th { font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-    color:var(--c-accent); background:none; border:none; padding:0; text-align:left; }
-  .pc-th.sortable { cursor:pointer; }
-  .pc-th.sortable:hover { color:var(--c-primary); }
-  .pc-th.on { color:var(--c-primary); }
-  .pc-th.right { text-align:right; }
-  .pc-tr { border-bottom:1px solid rgba(167,154,133,.1); min-height:26px; }
+
+  /* A real table, fixed layout: the header and the body share one set of
+     column widths, so nothing can drift out of alignment. */
+  .pc-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .pc-table th, .pc-table td { padding:3px 6px; text-align:left; vertical-align:middle;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pc-table th.right, .pc-table td.right { text-align:right; }
+  .pc-table th { position:sticky; top:0; z-index:1; background:#0e0d0c; padding:0;
+    border-bottom:1px solid rgba(167,154,133,.24); font-size:9.5px; font-weight:700;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--c-accent); }
+  .pc-table th:not(.right) { padding:4px 6px; }
+
+  /* Header buttons fill their cell and carry no chrome of their own — they are
+     column labels, not controls sitting inside one. Needs to out-specify the
+     panel-wide .pc button rule. */
+  .pc .pc-sort { display:block; width:100%; background:none; border:none;
+    padding:4px 6px; font:inherit; color:inherit; text-align:inherit; cursor:pointer;
+    text-transform:inherit; letter-spacing:inherit; }
+  .pc .pc-sort:hover { color:var(--c-primary); background:rgba(167,154,133,.1); }
+  .pc .pc-sort.on { color:var(--c-primary); }
+  .pc-table th.right .pc-sort { text-align:right; }
+
+  .pc-tr { border-bottom:1px solid rgba(167,154,133,.1); }
   .pc-tr:hover { background:rgba(167,154,133,.07); }
-  .pc-item-btn { padding:0; border:1px solid transparent; background:none; line-height:0;
-    border-radius:2px; }
-  .pc-item-btn:hover, .pc-item-btn.on { border-color:rgba(237,230,213,.5);
+  .pc-table td.summary { color:var(--c-primary); }
+  .pc-table td.seller { color:var(--c-accent); }
+  .pc-table td.right { font-variant-numeric:tabular-nums; color:var(--c-accent); }
+  .pc-table td.listed { color:var(--c-accent); }
+  .pc-table td.price { color:var(--c-primary); font-weight:600; }
+  .pc .pc-item-btn { display:block; padding:1px; border:1px solid transparent; background:none;
+    line-height:0; border-radius:2px; cursor:pointer; }
+  .pc .pc-item-btn:hover, .pc .pc-item-btn.on { border-color:rgba(237,230,213,.5);
     background:rgba(167,154,133,.14); }
-  .pc-icon { width:24px; height:24px; object-fit:contain; }
-  .pc-td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pc-td.right { text-align:right; font-variant-numeric:tabular-nums; color:var(--c-accent); }
-  .pc-td.summary { color:var(--c-primary); }
-  .pc-td.price { font-weight:600; font-variant-numeric:tabular-nums;
-    display:flex; align-items:center; justify-content:flex-end; gap:3px; }
-  .pc-cur { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
-  .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; }
+  .pc-icon { width:22px; height:22px; object-fit:contain; }
+  .pc-amount { margin-left:3px; }
+  .pc-cur { width:14px; height:14px; object-fit:contain; vertical-align:-3px; margin-left:2px; }
+  .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; margin-left:2px; }
   .pc-norm { color:var(--c-accent); font-weight:400; font-size:10px; }
-  .pc-td.listed { color:var(--c-accent); font-variant-numeric:tabular-nums; text-align:right; }
-  .pc-td.seller { color:var(--c-accent); }
-  .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px;
-    vertical-align:baseline; }
+  .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; }
   .pc-dot.online { background:#5fa372; }
   .pc-dot.afk { background:#d9a441; }
   .pc-dot.offline { background:#4a4438; }
   .pc-empty { padding:10px 6px; color:var(--c-accent); font-style:italic; }
 
   /* ── expanded item ───────────────────────────────────────────────────── */
-  .pc-detail { padding:6px 9px 8px 37px; border-bottom:1px solid rgba(167,154,133,.1);
-    background:rgba(167,154,133,.05); display:flex; flex-direction:column; gap:4px; }
-  .pc-detail-head { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
-  .pc-detail-facts { color:var(--c-accent); font-size:10px; }
-  .pc-mods { display:flex; flex-direction:column; gap:1px;
-    border-top:1px solid rgba(167,154,133,.14); padding-top:4px; }
+  .pc-detail-row { border-bottom:1px solid rgba(167,154,133,.1); }
+  .pc-detail-row > td { padding:6px 9px 8px 36px; background:rgba(167,154,133,.05);
+    white-space:normal; }
+  .pc-detail-head { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+    margin-bottom:3px; }
+  .pc-detail-facts { color:var(--c-accent); font-size:10px; margin-bottom:3px; max-width:720px; }
+  /* Capped to a readable measure: right-aligned tier and range are only
+     useful if they stay near the mod they belong to. */
+  .pc-mods { max-width:720px; display:flex; flex-direction:column; gap:1px;
+    border-top:1px solid rgba(167,154,133,.14); padding-top:3px; margin-top:3px; }
   .pc-mod { display:flex; align-items:baseline; gap:6px; }
   .pc-mod-text { color:#8c9ce6; }
   .pc-mod.implicit .pc-mod-text, .pc-mod.enchant .pc-mod-text { color:#9bc8bd; }

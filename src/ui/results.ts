@@ -152,19 +152,20 @@ interface Column {
 }
 
 /**
- * Price sits hard right, where a price list is read from, with how long it has
- * been up immediately to its left. The seller is a fixed narrow column — worth
- * seeing, not worth a quarter of the row, now that trades are made through the
- * game's own async offers instead of by whispering.
+ * Fixed widths, applied through a <colgroup> on a `table-layout: fixed`
+ * table. Header and body are one layout here, so a long mod line cannot push
+ * the price column around — which is what happened while the header and rows
+ * were two independent CSS grids, each sizing its `auto` tracks to its own
+ * content.
  */
-const TRACKS: Record<ColumnKey, string> = {
-  icon: '28px',
-  summary: 'minmax(0, 1fr)',
-  seller: '84px',
-  stock: '44px',
-  ilvl: '36px',
-  listed: '52px',
-  price: 'auto',
+const WIDTHS: Record<ColumnKey, string> = {
+  icon: '30px',
+  summary: 'auto',
+  seller: '96px',
+  stock: '48px',
+  ilvl: '40px',
+  listed: '58px',
+  price: '104px',
   none: 'auto',
 };
 
@@ -196,8 +197,47 @@ function columnsFor(options: ResultsOptions): Column[] {
 }
 
 function caret(active: boolean, descending: boolean): string {
-  if (!active) return '';
-  return descending ? ' ↓' : ' ↑';
+  return active ? (descending ? ' ↓' : ' ↑') : '';
+}
+
+function renderHead(columns: Column[], options: ResultsOptions): HTMLTableSectionElement {
+  const thead = el('thead');
+  const row = el('tr');
+
+  for (const column of columns) {
+    const cell = el('th', column.align === 'right' ? 'right' : undefined);
+    cell.scope = 'col';
+
+    if (!column.sortable) {
+      cell.textContent = column.label;
+      row.append(cell);
+      continue;
+    }
+
+    const isPrice = column.key === 'price';
+    const active = isPrice || options.sort.column === column.key;
+    const descending = isPrice ? options.priceDescending : options.sort.descending;
+    // aria-sort belongs on the header cell, so a screen reader announces the
+    // column's state rather than the button's.
+    cell.setAttribute('aria-sort', active ? (descending ? 'descending' : 'ascending') : 'none');
+
+    const button = el('button', `pc-sort${active ? ' on' : ''}`);
+    button.type = 'button';
+    button.textContent = `${column.label}${caret(active, descending)}`;
+    button.title = isPrice
+      ? 'Currencies only compare on the server — this re-runs the search.'
+      : `Sort by ${column.label.toLowerCase()}`;
+    button.addEventListener(
+      'click',
+      isPrice ? options.onPriceSort : () => options.onSort(column.key as LocalSort),
+    );
+
+    cell.append(button);
+    row.append(cell);
+  }
+
+  thead.append(row);
+  return thead;
 }
 
 export function renderResults(container: HTMLElement, options: ResultsOptions): void {
@@ -217,38 +257,24 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
   }
 
   const columns = columnsFor(options);
-  const table = el('div', 'pc-table');
-  // Header and rows are separate grid containers, so they need the same
-  // explicit track list to line up.
-  table.style.setProperty('--tracks', columns.map((c) => TRACKS[c.key]).join(' '));
+  const table = el('table', 'pc-table');
 
-  const head = el('div', 'pc-thead');
+  const colgroup = el('colgroup');
   for (const column of columns) {
-    if (!column.sortable) {
-      head.append(el('span', `pc-th ${column.align ?? ''}`.trim(), column.label));
-      continue;
-    }
-    const button = el('button', `pc-th sortable ${column.align ?? ''}`.trim());
-    button.type = 'button';
-    if (column.key === 'price') {
-      button.textContent = `Price${caret(true, options.priceDescending)}`;
-      button.title = 'Currencies only compare on the server — this re-runs the search.';
-      button.addEventListener('click', options.onPriceSort);
-    } else {
-      const active = options.sort.column === column.key;
-      button.textContent = `${column.label}${caret(active, options.sort.descending)}`;
-      button.classList.toggle('on', active);
-      button.addEventListener('click', () => options.onSort(column.key as LocalSort));
-    }
-    head.append(button);
+    const col = el('col');
+    col.style.width = WIDTHS[column.key];
+    colgroup.append(col);
   }
-  table.append(head);
+  table.append(colgroup, renderHead(columns, options));
 
+  const body = el('tbody');
   for (const listing of options.listings) {
-    const row = el('div', 'pc-tr');
+    const row = el('tr', 'pc-tr');
     const open = options.expanded.has(listing.id);
 
     for (const column of columns) {
+      const cell = el('td', column.align === 'right' ? 'right' : undefined);
+
       if (column.key === 'icon') {
         // The icon is the control: press it to see the whole item.
         const button = el('button', `pc-item-btn${open ? ' on' : ''}`);
@@ -262,54 +288,47 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
         });
         button.append(img);
         button.addEventListener('click', () => options.onToggleItem(listing.id));
-        row.append(button);
-        continue;
-      }
-      if (column.key === 'summary') {
+        cell.append(button);
+      } else if (column.key === 'summary') {
         const summary = listingSummary(listing);
-        const cell = el('span', 'pc-td summary', summary);
+        cell.className = 'summary';
+        cell.textContent = summary;
         cell.title = summary;
-        row.append(cell);
-        continue;
-      }
-      if (column.key === 'seller') {
-        const cell = el('span', 'pc-td seller', sellerLabel(listing));
+      } else if (column.key === 'seller') {
+        cell.className = 'seller';
+        cell.textContent = sellerLabel(listing);
         cell.title = listing.account.name;
-        row.append(cell);
-        continue;
-      }
-      if (column.key === 'stock') {
-        row.append(el('span', 'pc-td right', String(listing.item.stackSize ?? '')));
-        continue;
-      }
-      if (column.key === 'ilvl') {
-        row.append(el('span', 'pc-td right', String(listing.item.ilvl ?? '')));
-        continue;
-      }
-      if (column.key === 'listed') {
-        const cell = el('span', 'pc-td listed');
+      } else if (column.key === 'stock') {
+        cell.textContent = String(listing.item.stackSize ?? '');
+      } else if (column.key === 'ilvl') {
+        cell.textContent = String(listing.item.ilvl ?? '');
+      } else if (column.key === 'listed') {
+        cell.className = 'right listed';
         const status = sellerStatus(listing);
         const dot = el('span', `pc-dot ${status}`);
         dot.title = status;
         cell.append(dot, document.createTextNode(ago(listing.indexed)));
         if (listing.indexed) cell.title = new Date(listing.indexed).toLocaleString();
-        row.append(cell);
-        continue;
+      } else {
+        cell.className = 'right price';
+        renderPrice(cell, listing, options);
       }
 
-      const cell = el('span', 'pc-td price');
-      renderPrice(cell, listing, options);
       row.append(cell);
     }
 
-    table.append(row);
+    body.append(row);
 
     if (open) {
-      const detail = el('div', 'pc-detail');
-      renderListingItem(detail, listing);
-      table.append(detail);
+      const detailRow = el('tr', 'pc-detail-row');
+      const cell = el('td');
+      cell.colSpan = columns.length;
+      renderListingItem(cell, listing);
+      detailRow.append(cell);
+      body.append(detailRow);
     }
   }
 
+  table.append(body);
   container.append(table);
 }

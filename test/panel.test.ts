@@ -91,7 +91,7 @@ const shown = (sel: string) => {
 };
 const click = (node: HTMLElement | undefined) =>
   node?.dispatchEvent(new win.Event('click', { bubbles: true }));
-const headings = () => $$('.pc-th').map((n) => String(n.textContent).trim());
+const headings = () => $$('th').map((n) => String(n.textContent).trim());
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = ''): void {
@@ -152,13 +152,40 @@ check('the whisper button is gone', $$('.pc-copy').length === 0, `${$$('.pc-copy
 // A rare's random name says nothing, so its mods stand in for it.
 check(
   'the summary shows the mods',
-  /\+43 to Evasion Rating/.test(String($('.pc-td.summary')?.textContent)),
-  String($('.pc-td.summary')?.textContent),
+  /\+43 to Evasion Rating/.test(String($('td.summary')?.textContent)),
+  String($('td.summary')?.textContent),
 );
 check(
   'with the link markup unwrapped',
-  !/[[\]|]/.test(String($('.pc-td.summary')?.textContent)),
-  String($('.pc-td.summary')?.textContent),
+  !/[[\]|]/.test(String($('td.summary')?.textContent)),
+  String($('td.summary')?.textContent),
+);
+
+
+// ── it is a real table ──────────────────────────────────────────────────────
+// The header and the rows used to be separate CSS grids, each sizing its own
+// `auto` tracks, so the columns drifted apart. One table, one layout.
+const table = $('.pc-table') as HTMLTableElement | null;
+check('the listings are a table element', table?.tagName === 'TABLE', String(table?.tagName));
+check('with a colgroup fixing the widths', !!$('.pc-table colgroup'), 'no colgroup');
+const headerCells = $$('.pc-table thead th');
+const firstRowCells = [...($('.pc-table tbody tr.pc-tr')?.children ?? [])];
+check(
+  'header and body have the same number of columns',
+  headerCells.length === firstRowCells.length,
+  `${headerCells.length} vs ${firstRowCells.length}`,
+);
+check('column widths are declared once', $$('.pc-table col').length === headerCells.length);
+check('header cells are scoped for a screen reader', headerCells.every((c) => c.getAttribute('scope') === 'col'));
+check(
+  'the sorted column is announced',
+  $$('.pc-table th[aria-sort="ascending"], .pc-table th[aria-sort="descending"]').length >= 1,
+  'no aria-sort set',
+);
+check(
+  'unsorted columns say so too',
+  $$('.pc-table th[aria-sort="none"]').length >= 1,
+  'no aria-sort=none',
 );
 
 const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
@@ -168,7 +195,7 @@ check('missing online key means offline', dots[2] === 'offline', dots.join(','))
 
 
 // ── the full item, behind the icon ──────────────────────────────────────────
-check('nothing is expanded to begin with', $$('.pc-detail').length === 0);
+check('nothing is expanded to begin with', $$('.pc-detail-row').length === 0);
 const itemButtons = $$('.pc-item-btn');
 check('every row has an item button', itemButtons.length === 3, `${itemButtons.length}`);
 check('collapsed rows say so', itemButtons[0].getAttribute('aria-expanded') === 'false');
@@ -177,12 +204,12 @@ const searchesBeforeExpand = searchCount;
 click(itemButtons[0]);
 await settle(80);
 
-const detail = $('.pc-detail');
+const detail = $('.pc-detail-row');
 check('pressing it opens the item', !!detail, 'no detail panel');
 check('opening costs no API call', searchCount === searchesBeforeExpand, `count=${searchCount}`);
 check('and marks the button expanded', $$('.pc-item-btn')[0].getAttribute('aria-expanded') === 'true');
 
-const detailText = () => String($('.pc-detail')?.textContent ?? '').replace(/\s+/g, ' ');
+const detailText = () => String($('.pc-detail-row')?.textContent ?? '').replace(/\s+/g, ' ');
 check('names the item', /Dusk Turn/.test(detailText()), detailText());
 check('shows its level requirement', /Level: 39/.test(detailText()), detailText());
 check('shows the implicit', /\+10% to all Elemental Resistances/.test(detailText()), detailText());
@@ -199,25 +226,25 @@ check(
 // A second row opens independently of the first.
 click($$('.pc-item-btn')[1]);
 await settle(80);
-check('rows expand independently', $$('.pc-detail').length === 2, `${$$('.pc-detail').length}`);
+check('rows expand independently', $$('.pc-detail-row').length === 2, `${$$('.pc-detail-row').length}`);
 
 click($$('.pc-item-btn')[0]);
 await settle(80);
-check('and close again', $$('.pc-detail').length === 1, `${$$('.pc-detail').length}`);
+check('and close again', $$('.pc-detail-row').length === 1, `${$$('.pc-detail-row').length}`);
 
 // Local sort: ilvl ascending, then descending, with no API call either way.
-const ilvls = () => $$('.pc-td.right').map((n) => String(n.textContent).trim());
-click($$('.pc-th').find((n) => String(n.textContent).startsWith('ilvl')));
+const ilvls = () => $$('td.right:not(.listed):not(.price)').map((n) => String(n.textContent).trim());
+click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
 await settle();
 check('ilvl sorts ascending', ilvls().join(',') === '47,65,81', ilvls().join(','));
-click($$('.pc-th').find((n) => String(n.textContent).startsWith('ilvl')));
+click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
 await settle();
 check('clicking again reverses it', ilvls().join(',') === '81,65,47', ilvls().join(','));
 check('caret marks the sorted column', /ilvl\s*↓/.test(text()));
 check('local sorting costs no API call', searchCount === 1, `count=${searchCount}`);
 
 // Price order belongs to the server, so it re-runs the search.
-click($$('.pc-th').find((n) => String(n.textContent).startsWith('Price')));
+click($$('.pc-sort').find((n) => String(n.textContent).startsWith('Price')));
 await settle(200);
 check('price sort re-runs the search', searchCount === 2, `count=${searchCount}`);
 check('and flips to descending', lastSort === '{"price":"desc"}', lastSort);
@@ -229,14 +256,14 @@ check('and flips to descending', lastSort === '{"price":"desc"}', lastSort);
 check('every price cell shows an icon, not a word', $$('.pc-cur').length === 3, `${$$('.pc-cur').length}`);
 check(
   'no currency name in the cell text',
-  !$$('.pc-td.price').some((n) => /exalted/i.test(String(n.textContent))),
-  $$('.pc-td.price').map((n) => n.textContent).join('/'),
+  !$$('td.price').some((n) => /exalted/i.test(String(n.textContent))),
+  $$('td.price').map((n) => n.textContent).join('/'),
 );
 check('icons went through the host cache', iconRequests.some((u) => u.includes('exalted')), iconRequests.join(','));
 check(
   'the currency name is in the tooltip',
-  ($('.pc-td.price') as HTMLElement).title.includes('Exalted Orb'),
-  ($('.pc-td.price') as HTMLElement).title,
+  ($('td.price') as HTMLElement).title.includes('Exalted Orb'),
+  ($('td.price') as HTMLElement).title,
 );
 const amounts = () => $$('.pc-amount').map((n) => String(n.textContent).trim());
 check(

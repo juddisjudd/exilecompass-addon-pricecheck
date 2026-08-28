@@ -48,13 +48,18 @@ next host release.
 ```bash
 bun install
 bun run check    # tsc --noEmit
-bun run test     # parser, stat matching, and rate limiter
+bun run test     # parser, stat matching, rate limiter, and the panel itself
 bun run build    # bundles src/panel.ts -> dist/panel.js
 ```
 
-`test/live-search.mjs` is a manual check that runs a real search against the
-trade API. It is not part of `bun run test` because it spends your IP's
-rate-limit budget.
+`test/panel.test.ts` mounts the real panel in a DOM (happy-dom) behind the same
+fake host bridge ExileCompass provides, then drives it — paste, search, sort.
+Its trade responses come from `test/fixtures/`, so it runs offline and spends
+no rate-limit budget.
+
+`test/live-search.mjs` is the counterpart: a manual check that runs a real
+search against the trade API. It is not part of `bun run test` because it does
+spend your IP's budget.
 
 Releases are tag-driven: push `vX.Y.Z` with matching versions in
 `package.json` and `plugin.manifest.json`, and the workflow publishes

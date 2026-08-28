@@ -7,6 +7,26 @@ export const FETCH_POLICY = 'trade-fetch-request-limit';
 /** How many listings one price check pulls. Fetch takes at most 10 ids. */
 export const RESULT_LIMIT = 10;
 
+/**
+ * What the API will order by. `price` and `indexed` are the only keys it
+ * accepts — anything else is a hard 400 ("Unknown sort key"), verified live.
+ *
+ * Price ordering has to happen server-side: listings are priced in different
+ * currencies, and only GGG knows today's rates between them. Sorting a fetched
+ * page by raw amount would put 1 divine below 5 exalted.
+ */
+export type SortKey = 'price-asc' | 'price-desc' | 'recent';
+
+export const SORTS: Array<{ key: SortKey; label: string; sort: Record<string, string> }> = [
+  { key: 'price-asc', label: 'Cheapest first', sort: { price: 'asc' } },
+  { key: 'price-desc', label: 'Most expensive', sort: { price: 'desc' } },
+  { key: 'recent', label: 'Recently listed', sort: { indexed: 'desc' } },
+];
+
+export function sortFor(key: SortKey): Record<string, string> {
+  return (SORTS.find((s) => s.key === key) ?? SORTS[0]).sort;
+}
+
 export interface SearchResponse {
   id: string;
   complexity: number;
@@ -14,12 +34,25 @@ export interface SearchResponse {
   result: string[];
 }
 
+/**
+ * Absent when the seller is offline; present with `status: 'afk'` when they
+ * are logged in but away. It is an object, not a boolean — treating it as one
+ * marks every offline seller as online.
+ */
+export interface AccountOnline {
+  league?: string;
+  status?: string;
+}
+
+export type SellerStatus = 'online' | 'afk' | 'offline';
+
 export interface Listing {
   id: string;
   price: { type: string; amount: number; currency: string } | null;
-  account: { name: string; online: boolean; lastCharacterName?: string };
+  account: { name: string; online?: AccountOnline; lastCharacterName?: string };
   stash?: { name: string; x: number; y: number };
   whisper: string;
+  /** ISO timestamp of when the listing was indexed. */
   indexed?: string;
   item: {
     name?: string;
@@ -27,6 +60,7 @@ export interface Listing {
     baseType?: string;
     icon?: string;
     ilvl?: number;
+    stackSize?: number;
     corrupted?: boolean;
     properties?: Array<{ name: string; values: Array<[string, number]> }>;
     explicitMods?: string[];
@@ -52,6 +86,12 @@ export interface SearchOutcome {
   queryId: string;
   total: number;
   listings: Listing[];
+}
+
+export function sellerStatus(listing: Listing): SellerStatus {
+  const online = listing.account.online;
+  if (!online) return 'offline';
+  return online.status === 'afk' ? 'afk' : 'online';
 }
 
 /** The trade site URL for a completed search, so the user can open it. */

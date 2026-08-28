@@ -17,12 +17,14 @@ export interface TradeRequest {
     }>;
     filters: Record<string, { filters: Record<string, unknown> }>;
   };
-  sort: { price: 'asc' };
+  sort: Record<string, string>;
 }
 
 export interface QueryOptions {
   /** `online` (default), `onlineleague`, or `any`. */
   status?: string;
+  /** What the API orders by. Only `price` and `indexed` are accepted keys. */
+  sort?: Record<string, string>;
   /** Search by base type. Off for uniques, where the name is the identity. */
   useType?: boolean;
   /** Match the item's own rarity, so a rare search doesn't return uniques. */
@@ -146,5 +148,5 @@ export function buildQuery(
     query.type = item.baseType;
   }
 
-  return { query, sort: { price: 'asc' } };
+  return { query, sort: options.sort ?? { price: 'asc' } };
 }

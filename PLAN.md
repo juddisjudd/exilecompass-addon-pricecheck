@@ -521,8 +521,9 @@ src/
     search.ts         POST /search then GET /fetch
   ui/
     dom.ts            el() helper, panel CSS, clipboard fallback
+    item.ts           compact item header + property chips (never the raw text)
     filters.ts        checkbox + min/max row per matched stat
-    results.ts        price rows, icons via net.fetchImage, whisper copy
+    results.ts        sortable listings table: price, stock, ilvl, age, seller
 test/
   parser.test.ts      fixtures for rare/plain/weapon/currency/negative rolls
   match.test.ts       stat matching against the live /data/stats payload
@@ -580,6 +581,39 @@ Ctrl+D over the game
   -> user adjusts -> POST /search/<selected league> -> GET /fetch  [5.1, rate-limited]
   -> price rows + whisper copy + trade-site link
 ```
+
+### 6.2 Results presentation
+
+The listings are the answer, so they get the space. Everything above them
+collapses once it has served its purpose: the paste box disappears the moment
+an item parses (replaced by a one-line header plus property chips — never the
+raw copied text), and the filters collapse to a `3 of 9 active` summary as soon
+as a search returns something. Both reopen on click.
+
+The listings themselves follow Exiled Exchange 2's table rather than Sidekick's
+per-listing item cards (`Trade/Items/ItemComponent.razor`, which re-renders the
+whole item and offers a compact-mode toggle to escape it). A price check is a
+comparison across sellers, and a table compares; a stack of cards does not. As
+in EE2's `TradeListing.vue`, columns are conditional on the item — stock only
+for stackables, ilvl only when the listings carry one — and seller status is a
+coloured dot (online / afk / offline) rather than a word.
+
+**Sorting is split, deliberately.** `price` and `indexed` are the only sort keys
+the API accepts (anything else is a hard 400, verified live), and price order
+*must* be server-side: listings are priced in different currencies and only GGG
+knows the rates, so ordering a fetched page by raw amount would rank 1 divine
+below 5 exalted. So:
+
+- the **Order** select (cheapest / most expensive / recently listed) is what the
+  search asks the API for, and decides which listings come back at all;
+- clicking **Price** flips that order and re-runs the search — one click, one
+  search, through the limiter;
+- clicking **Listed**, **ilvl**, **Stock** or **Seller** reorders the fetched
+  page locally, with no API call.
+
+`account.online` is an **object** (`{league, status}`), absent when the seller is
+offline and carrying `status: "afk"` when they are away — not a boolean. Reading
+it as one marks every offline seller online.
 
 ---
 

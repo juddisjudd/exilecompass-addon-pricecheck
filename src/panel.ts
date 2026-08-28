@@ -10,10 +10,11 @@ import {
   type LeaguePair,
 } from './trade/league';
 import { buildQuery } from './trade/query';
-import { search, searchUrl, type Listing } from './trade/search';
+import { search, searchUrl, sortFor, SORTS, type Listing, type SortKey } from './trade/search';
 import { CSS, el } from './ui/dom';
 import { MAX_ENABLED_FILTERS, renderFilters } from './ui/filters';
-import { renderResults } from './ui/results';
+import { renderItemHeader } from './ui/item';
+import { renderResults, sortListings, type LocalSort, type SortState } from './ui/results';
 import type { MountFn } from './types';
 
 const SETTINGS_KEY = 'settings.v1';
@@ -25,9 +26,10 @@ interface Settings {
    */
   mode: LeagueMode;
   status: string;
+  sort: SortKey;
 }
 
-const DEFAULT_SETTINGS: Settings = { mode: 'sc', status: 'online' };
+const DEFAULT_SETTINGS: Settings = { mode: 'sc', status: 'online', sort: 'price-asc' };
 
 interface State {
   settings: Settings;
@@ -41,6 +43,10 @@ interface State {
   status: string;
   error: string;
   busy: boolean;
+  /** The paste box is only in the way once an item has been read from it. */
+  pasteOpen: boolean;
+  filtersOpen: boolean;
+  localSort: SortState;
 }
 
 const mount: MountFn = async ({ root, host }) => {
@@ -72,6 +78,9 @@ const mount: MountFn = async ({ root, host }) => {
     status: '',
     error: '',
     busy: false,
+    pasteOpen: true,
+    filtersOpen: true,
+    localSort: { column: 'none', descending: false },
   };
 
   const client = new TradeClient(host, {
@@ -87,14 +96,19 @@ const mount: MountFn = async ({ root, host }) => {
   const shell = el('div', 'pc');
   const bar = el('div', 'pc-bar');
   const notice = el('div');
+  const pasteWrap = el('div', 'pc-paste-wrap');
   const paste = el('textarea', 'pc-paste');
   paste.placeholder = 'Copy an item in game with Ctrl+C (hold Alt for mod tiers) and paste it here.';
   paste.spellcheck = false;
-  const head = el('div', 'pc-head');
-  const filterList = el('div', 'pc-scroll');
-  const resultList = el('div', 'pc-scroll');
+  pasteWrap.append(paste);
+  const itemHead = el('div', 'pc-item');
+  const filters = el('div', 'pc-filters');
+  const filtersHead = el('div', 'pc-filters-head');
+  const filterList = el('div', 'pc-filter-list');
+  filters.append(filtersHead, filterList);
+  const resultList = el('div', 'pc-results');
   const foot = el('div', 'pc-foot');
-  shell.append(bar, notice, paste, head, filterList, resultList, foot);
+  shell.append(bar, notice, pasteWrap, itemHead, filters, resultList, foot);
   root.append(shell);
 
   // ── settings ─────────────────────────────────────────────────────────────
@@ -133,10 +147,15 @@ const mount: MountFn = async ({ root, host }) => {
   }
 
   // ── actions ──────────────────────────────────────────────────────────────
-  async function parseInput(text: string): Promise<void> {
+  function resetResults(): void {
     state.listings = [];
     state.total = 0;
     state.queryId = '';
+    state.localSort = { column: 'none', descending: false };
+  }
+
+  async function parseInput(text: string): Promise<void> {
+    resetResults();
     state.error = '';
 
     const item = parseClipboard(text);
@@ -159,6 +178,9 @@ const mount: MountFn = async ({ root, host }) => {
       state.rows = [...buildStatFilters(match), ...buildEquipmentFilters(item)];
       state.unmatched = match.unmatched;
       state.status = '';
+      // The text has done its job; hand the space to the filters and prices.
+      state.pasteOpen = false;
+      paste.value = '';
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
       state.rows = [];
@@ -184,14 +206,21 @@ const mount: MountFn = async ({ root, host }) => {
     render();
 
     try {
-      const request = buildQuery(state.item, state.rows, { status: state.settings.status });
+      const request = buildQuery(state.item, state.rows, {
+        status: state.settings.status,
+        sort: sortFor(state.settings.sort),
+      });
       const outcome = await search(client, league, request);
       state.listings = outcome.listings;
       state.total = outcome.total;
       state.queryId = outcome.queryId;
+      state.localSort = { column: 'none', descending: false };
       state.status = outcome.total === 0 ? 'No matches.' : `${outcome.total} listings.`;
+      // Prices are the answer; collapse the filters once there are some.
+      if (outcome.listings.length) state.filtersOpen = false;
     } catch (err) {
-      state.error = err instanceof TradeError ? err.message : `Search failed: ${(err as Error).message}`;
+      state.error =
+        err instanceof TradeError ? err.message : `Search failed: ${(err as Error).message}`;
       state.listings = [];
     } finally {
       state.busy = false;
@@ -208,13 +237,12 @@ const mount: MountFn = async ({ root, host }) => {
       const league = state.leagues ? (mode === 'hc' ? state.leagues.hc : state.leagues.sc) : null;
       const button = el('button', state.settings.mode === mode ? 'on' : undefined);
       button.type = 'button';
-      button.textContent = mode === 'sc' ? 'Softcore' : 'Hardcore';
+      button.textContent = mode === 'sc' ? 'SC' : 'HC';
       button.title = league ? leagueLabel(league) : 'Loading leagues…';
       button.disabled = !league;
       button.addEventListener('click', () => {
         state.settings.mode = mode;
-        state.listings = [];
-        state.queryId = '';
+        resetResults();
         void saveSettings();
         render();
       });
@@ -222,10 +250,11 @@ const mount: MountFn = async ({ root, host }) => {
     });
 
     const status = el('select');
+    status.title = 'Which listings to include';
     for (const [value, label] of [
-      ['online', 'Online only'],
+      ['online', 'Online'],
       ['onlineleague', 'Online in league'],
-      ['any', 'Any listing'],
+      ['any', 'Any'],
     ]) {
       const option = el('option');
       option.value = value;
@@ -238,12 +267,27 @@ const mount: MountFn = async ({ root, host }) => {
       void saveSettings();
     });
 
+    const sort = el('select');
+    sort.title = 'What the search asks the API for';
+    for (const entry of SORTS) {
+      const option = el('option');
+      option.value = entry.key;
+      option.textContent = entry.label;
+      sort.append(option);
+    }
+    sort.value = state.settings.sort;
+    sort.addEventListener('change', () => {
+      state.settings.sort = sort.value as SortKey;
+      void saveSettings();
+      if (state.listings.length) void runSearch();
+    });
+
     const go = el('button', 'pc-primary', state.busy ? 'Searching…' : 'Price check');
     go.type = 'button';
     go.disabled = state.busy || !state.item || !state.leagues;
     go.addEventListener('click', () => void runSearch());
 
-    bar.append(toggle, status, go, el('div', 'pc-status', state.status));
+    bar.append(toggle, status, sort, go, el('div', 'pc-status', state.status));
   }
 
   function renderNotice(): void {
@@ -269,22 +313,63 @@ const mount: MountFn = async ({ root, host }) => {
     }
   }
 
-  function renderHead(): void {
-    head.replaceChildren();
-    if (!state.item) return;
-    const item = state.item;
-    head.append(el('span', 'pc-name', item.name || item.baseType || 'Item'));
-    const details = [item.baseType && item.baseType !== item.name ? item.baseType : '', item.itemClass]
-      .filter(Boolean)
-      .join(' • ');
-    if (details) head.append(el('span', 'pc-sub', details));
-    if (item.itemLevel) head.append(el('span', 'pc-sub', `ilvl ${item.itemLevel}`));
+  function renderItem(): void {
+    pasteWrap.style.display = state.pasteOpen ? '' : 'none';
+    itemHead.style.display = state.item && !state.pasteOpen ? '' : 'none';
+    if (!state.item || state.pasteOpen) return;
+    renderItemHeader(itemHead, {
+      item: state.item,
+      onChange: () => {
+        state.pasteOpen = true;
+        render();
+        paste.focus();
+      },
+    });
+  }
+
+  function renderFilterBlock(): void {
+    filters.style.display = state.rows.length ? '' : 'none';
+    filtersHead.replaceChildren();
+    if (!state.rows.length) return;
+
+    const enabled = state.rows.filter((row) => row.enabled).length;
+    const title = el('button', 'pc-filters-title', `${state.filtersOpen ? '▾' : '▸'} Filters`);
+    title.type = 'button';
+    title.addEventListener('click', () => {
+      state.filtersOpen = !state.filtersOpen;
+      render();
+    });
+    filtersHead.append(
+      title,
+      el('span', 'pc-filters-count', `${enabled} of ${state.rows.length} active`),
+    );
+
+    filterList.style.display = state.filtersOpen ? '' : 'none';
+    if (!state.filtersOpen) return;
+    renderFilters(filterList, {
+      rows: state.rows,
+      onChange: () => {
+        // Only the count in the header depends on this; redrawing the list
+        // would steal focus from the number input being typed into.
+        const active = state.rows.filter((row) => row.enabled).length;
+        filtersHead.replaceChildren(
+          title,
+          el('span', 'pc-filters-count', `${active} of ${state.rows.length} active`),
+        );
+      },
+    });
   }
 
   function renderFoot(): void {
     foot.replaceChildren();
     const league = state.leagues ? leagueFor(state.leagues, state.settings.mode) : null;
     foot.append(el('span', undefined, league ? leagueLabel(league) : 'Resolving league…'));
+
+    if (state.listings.length) {
+      foot.append(
+        el('span', undefined, `Showing ${state.listings.length} of ${state.total} listings`),
+      );
+    }
 
     if (state.queryId && league && host.shell) {
       const open = el('button', 'pc-link', 'Open on the trade site');
@@ -296,25 +381,43 @@ const mount: MountFn = async ({ root, host }) => {
     }
   }
 
-  function render(): void {
-    renderBar();
-    renderNotice();
-    renderHead();
-    renderFilters(filterList, {
-      rows: state.rows,
-      onChange: () => {
-        /* rows carry their own state; nothing to recompute until a search */
-      },
-    });
+  function renderList(): void {
     renderResults(resultList, {
       host,
-      listings: state.listings,
+      item: state.item,
+      listings: sortListings(state.listings, state.localSort),
       total: state.total,
+      sort: state.localSort,
+      priceDescending: state.settings.sort === 'price-desc',
+      onSort: (column: LocalSort) => {
+        state.localSort =
+          state.localSort.column === column
+            ? { column, descending: !state.localSort.descending }
+            : { column, descending: false };
+        renderList();
+      },
+      onPriceSort: () => {
+        state.settings.sort = state.settings.sort === 'price-asc' ? 'price-desc' : 'price-asc';
+        void saveSettings();
+        void runSearch();
+      },
       onStatus: (message) => {
         state.status = message;
         renderBar();
       },
+      onWhisper: () => {
+        // Hand focus back so the whisper can be pasted straight into chat.
+        void host.game?.get();
+      },
     });
+  }
+
+  function render(): void {
+    renderBar();
+    renderNotice();
+    renderItem();
+    renderFilterBlock();
+    renderList();
     renderFoot();
   }
 

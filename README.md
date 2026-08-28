@@ -17,6 +17,10 @@ off the response, neither of which older hosts can do.
   serves itself — no bundled mod database, nothing to re-release per patch.
 - Builds a search from the filters you tick, runs it, and lists the cheapest
   matching items with their prices, sellers, and ready-made whispers.
+- Shows prices with the currency's own icon, and can convert every listing into
+  one currency — divine, exalted or chaos — so a page of mixed asking prices
+  compares at a glance. Rates come from poe.ninja; without them prices simply
+  stay as each seller listed them.
 - Softcore or hardcore, always the current challenge league — resolved from
   the API, never hardcoded.
 - Obeys GGG's published rate limits. Breaking them bans your IP from trade for
@@ -40,6 +44,7 @@ next host release.
 | `storage.read` / `storage.write` | Remembers your league and status choice |
 | `network.request:pathofexile.com` | Searching the trade API (POST + rate-limit headers) |
 | `network.fetch:web.poecdn.com` | Item icons in the results list |
+| `network.fetch:poe.ninja` | Exchange rates, only when you ask to see prices in another currency |
 | `shell.open:pathofexile.com` | "Open on the trade site" |
 | `ui.panel` | Renders the panel |
 

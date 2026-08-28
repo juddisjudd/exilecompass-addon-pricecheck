@@ -109,3 +109,26 @@ export const RATE_HEADERS: Record<string, string> = {
   'x-rate-limit-ip': '5:10:60,15:60:300,30:300:1800,600:21600:3600',
   'x-rate-limit-ip-state': '1:10:0,1:60:0,1:300:0,1:21600:0',
 };
+
+/** Two currency entries, enough for icon rendering and conversion. */
+export const STATIC_RESPONSE = {
+  result: [
+    {
+      id: 'Currency',
+      entries: [
+        { id: 'exalted', text: 'Exalted Orb', image: '/gen/image/exalted.png' },
+        { id: 'divine', text: 'Divine Orb', image: '/gen/image/divine.png' },
+        { id: 'chaos', text: 'Chaos Orb', image: '/gen/image/chaos.png' },
+      ],
+    },
+  ],
+};
+
+/** poe.ninja's PoE2 currency overview, trimmed. Values are in divines. */
+export const NINJA_RESPONSE = {
+  core: { primary: 'divine', secondary: 'chaos', rates: { exalted: 371, chaos: 10.69 } },
+  lines: [
+    { id: 'exalted', primaryValue: 0.002695 },
+    { id: 'chaos', primaryValue: 0.09357 },
+  ],
+};

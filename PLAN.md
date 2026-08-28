@@ -518,14 +518,18 @@ src/
     league.ts         /data/leagues -> current SC + HC pair; mode toggle; 1 h cache
     rate-limiter.ts   parse X-Rate-Limit-Ip / -Ip-State; per-policy windows; 429 backoff
     query.ts          ParsedItem + enabled filters -> TradeRequest JSON
-    search.ts         POST /search then GET /fetch
+    search.ts         POST /search then GET /fetch; sort keys
+    currency.ts       /data/static names+icons; poe.ninja rates; conversion
   ui/
     dom.ts            el() helper, panel CSS, clipboard fallback
+    format.ts         compact amounts: 0.003, 2.5, 371, 1.5k, 1.2m
     item.ts           compact item header + property chips (never the raw text)
     filters.ts        checkbox + min/max row per matched stat
     results.ts        sortable listings table: price, stock, ilvl, age, seller
 test/
   parser.test.ts      fixtures for rare/plain/weapon/currency/negative rolls
+  currency.test.ts    amount formatting, icon lookup, rate conversion
+  panel.test.ts       mounts the panel in happy-dom and drives it (fixtures)
   match.test.ts       stat matching against the live /data/stats payload
   rate-limiter.test.ts  fake clock; bursts, bans, 429s, per-policy isolation
   live-search.mjs     manual end-to-end search (spends rate-limit budget)
@@ -539,6 +543,7 @@ permission it cannot yet use only makes the install prompt scarier for no gain.
 storage.read, storage.write,
 network.request:pathofexile.com,
 network.fetch:web.poecdn.com,
+network.fetch:poe.ninja,
 shell.open:pathofexile.com,
 ui.panel
 ```
@@ -610,6 +615,30 @@ below 5 exalted. So:
   search, through the limiter;
 - clicking **Listed**, **ilvl**, **Stock** or **Seller** reorders the fetched
   page locally, with no API call.
+
+
+**Currency is shown as an icon, not a word.** `/data/static` publishes a name
+and image for every currency, keyed by exactly the id a listing's
+`price.currency` carries, so there is nothing to bundle or map by hand — Sidekick
+renders `amount × [icon]` with the name in a tooltip (`PriceDisplay.razor`), and
+EE2 bundles four PNGs picked by first letter (`CoreCurrencyImg.vue`). The API's
+own table is better than either. Icons load through `net.fetchImage`, so they
+are disk-cached like item icons.
+
+Amounts are compacted (`formatAmount`): prices span from 0.002 divine for a rune
+to hundreds of thousands of exalted for a mirror, so small values keep two
+decimals and large ones become `1.5k` / `1.2m`.
+
+**Converting between currencies needs a rate source, and GGG does not publish
+one.** EE2 normalizes against poe.ninja's currency exchange and lets the user
+pick a "core currency" (`Prices.ts`, `autoCurrency`); Sidekick does not convert
+at all. We follow EE2's source: poe.ninja's PoE2 exchange overview gives every
+currency's worth in divines, under ids that match GGG's. That costs one extra
+permission (`network.fetch:poe.ninja`), cached for an hour through
+`net.fetchCached`, and it is entirely optional — the "Prices in" select offers
+"As listed" plus whatever the rate table actually covers, and falls back to "As
+listed" whenever poe.ninja cannot be reached. A missing rate yields `null`, never
+a guessed conversion.
 
 `account.online` is an **object** (`{league, status}`), absent when the seller is
 offline and carrying `status: "afk"` when they are away — not a boolean. Reading

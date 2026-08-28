@@ -1,7 +1,9 @@
 import type { AddonHost } from '../types';
 import type { ParsedItem } from '../parser/types';
 import { sellerStatus, type Listing } from '../trade/search';
+import type { CurrencyIndex, Rates } from '../trade/currency';
 import { copyText, el } from './dom';
+import { formatAmount } from './format';
 
 /**
  * Columns the page can be reordered by locally. Price is deliberately absent:
@@ -28,9 +30,56 @@ function ago(iso: string | undefined): string {
   return `${Math.round(days / 30)}mo`;
 }
 
-function priceLabel(listing: Listing): string {
+/**
+ * `5 × [divine icon]`, the way both reference tools show it — the icon is what
+ * a player recognises, and the word "divine" costs a third of the column.
+ * The full name and, when converted, the seller's original asking price live
+ * in the tooltip.
+ */
+function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOptions): void {
   const price = listing.price;
-  return price ? `${price.amount} ${price.currency}` : '—';
+  if (!price) {
+    cell.textContent = '—';
+    return;
+  }
+
+  let amount = price.amount;
+  let currency = price.currency;
+  let converted = false;
+
+  const target = options.display;
+  if (target && target !== 'listed' && options.rates) {
+    const value = options.rates.convert(price.amount, price.currency, target);
+    if (value !== null) {
+      amount = value;
+      currency = target;
+      converted = true;
+    }
+  }
+
+  const meta = options.currencies?.get(currency);
+  cell.append(el('span', 'pc-amount', formatAmount(amount)));
+
+  if (meta?.icon && options.host.net?.fetchImage) {
+    const img = el('img', 'pc-cur');
+    img.alt = meta.name;
+    void options.host.net
+      .fetchImage(meta.icon)
+      .then((src) => {
+        if (src) img.src = src;
+      })
+      .catch(() => {
+        // No icon, no problem — the name still reads in the tooltip.
+      });
+    cell.append(img);
+  } else {
+    cell.append(el('span', 'pc-cur-text', currency));
+  }
+
+  const parts = [meta?.name ?? currency];
+  if (converted) parts.push(`listed as ${formatAmount(price.amount)} ${price.currency}`);
+  if (price.type && price.type !== 'exact') parts.push(price.type);
+  cell.title = parts.join(' — ');
 }
 
 function sellerLabel(listing: Listing): string {
@@ -84,6 +133,12 @@ export interface ResultsOptions {
   onPriceSort: () => void;
   onStatus: (message: string) => void;
   onWhisper: (listing: Listing) => void;
+  /** Currency names and icons from /data/static. */
+  currencies: CurrencyIndex | null;
+  /** Exchange rates, when poe.ninja could be reached. */
+  rates: Rates | null;
+  /** `listed` keeps each seller's own currency; anything else converts. */
+  display: string;
 }
 
 interface Column {
@@ -195,8 +250,8 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
         continue;
       }
       if (column.key === 'price') {
-        const cell = el('span', 'pc-td price', priceLabel(listing));
-        if (listing.price?.type && listing.price.type !== 'exact') cell.title = listing.price.type;
+        const cell = el('span', 'pc-td price');
+        renderPrice(cell, listing, options);
         row.append(cell);
         continue;
       }

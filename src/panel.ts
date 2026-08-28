@@ -9,6 +9,7 @@ import {
   type LeagueMode,
   type LeaguePair,
 } from './trade/league';
+import { CurrencyIndex, loadCurrencies, loadRates, type Rates } from './trade/currency';
 import { buildQuery } from './trade/query';
 import { search, searchUrl, sortFor, SORTS, type Listing, type SortKey } from './trade/search';
 import { CSS, el } from './ui/dom';
@@ -27,9 +28,16 @@ interface Settings {
   mode: LeagueMode;
   status: string;
   sort: SortKey;
+  /** Currency to show prices in, or `listed` to keep each seller's own. */
+  display: string;
 }
 
-const DEFAULT_SETTINGS: Settings = { mode: 'sc', status: 'online', sort: 'price-asc' };
+const DEFAULT_SETTINGS: Settings = {
+  mode: 'sc',
+  status: 'online',
+  sort: 'price-asc',
+  display: 'listed',
+};
 
 interface State {
   settings: Settings;
@@ -47,6 +55,8 @@ interface State {
   pasteOpen: boolean;
   filtersOpen: boolean;
   localSort: SortState;
+  currencies: CurrencyIndex | null;
+  rates: Rates | null;
 }
 
 const mount: MountFn = async ({ root, host }) => {
@@ -81,6 +91,8 @@ const mount: MountFn = async ({ root, host }) => {
     pasteOpen: true,
     filtersOpen: true,
     localSort: { column: 'none', descending: false },
+    currencies: null,
+    rates: null,
   };
 
   const client = new TradeClient(host, {
@@ -139,6 +151,27 @@ const mount: MountFn = async ({ root, host }) => {
       }
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  /**
+   * Currency names and icons ship with the trade API itself, so this is free
+   * beyond the one cached GET. Rates do not: they come from poe.ninja, and the
+   * panel works without them — prices just stay in whatever the seller asked.
+   */
+  async function loadCurrencyData(): Promise<void> {
+    if (!state.currencies) {
+      try {
+        state.currencies = await loadCurrencies(client);
+      } catch {
+        /* icons are a nicety; the currency id still reads as text */
+      }
+    }
+    const league = currentLeague();
+    if (league && !state.rates) state.rates = await loadRates(host, league);
+    if (state.settings.display !== 'listed' && !state.rates) {
+      state.settings.display = 'listed';
+      state.error = 'Could not reach poe.ninja for exchange rates — showing prices as listed.';
     }
   }
 
@@ -282,12 +315,34 @@ const mount: MountFn = async ({ root, host }) => {
       if (state.listings.length) void runSearch();
     });
 
+    // Only offered once rates are in hand — a converter with no rates is a
+    // control that silently does nothing.
+    const display = el('select');
+    display.title = 'Currency to show prices in';
+    const options: Array<[string, string]> = [['listed', 'As listed']];
+    for (const id of state.rates?.targets() ?? []) {
+      options.push([id, `in ${state.currencies?.get(id).name ?? id}`]);
+    }
+    for (const [value, label] of options) {
+      const option = el('option');
+      option.value = value;
+      option.textContent = label;
+      display.append(option);
+    }
+    display.value = state.settings.display;
+    display.disabled = options.length === 1;
+    display.addEventListener('change', () => {
+      state.settings.display = display.value;
+      void saveSettings();
+      renderList();
+    });
+
     const go = el('button', 'pc-primary', state.busy ? 'Searching…' : 'Price check');
     go.type = 'button';
     go.disabled = state.busy || !state.item || !state.leagues;
     go.addEventListener('click', () => void runSearch());
 
-    bar.append(toggle, status, sort, go, el('div', 'pc-status', state.status));
+    bar.append(toggle, status, sort, display, go, el('div', 'pc-status', state.status));
   }
 
   function renderNotice(): void {
@@ -405,6 +460,9 @@ const mount: MountFn = async ({ root, host }) => {
         state.status = message;
         renderBar();
       },
+      currencies: state.currencies,
+      rates: state.rates,
+      display: state.settings.display,
       onWhisper: () => {
         // Hand focus back so the whisper can be pasted straight into chat.
         void host.game?.get();
@@ -426,6 +484,8 @@ const mount: MountFn = async ({ root, host }) => {
   await loadSettings();
   render();
   await loadLeagues();
+  render();
+  await loadCurrencyData();
   render();
 };
 

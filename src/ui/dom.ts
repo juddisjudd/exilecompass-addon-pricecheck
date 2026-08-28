@@ -103,7 +103,10 @@ export const CSS = `
   .pc-icon { width:24px; height:24px; object-fit:contain; }
   .pc-td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pc-td.right { text-align:right; font-variant-numeric:tabular-nums; color:var(--c-accent); }
-  .pc-td.price { font-weight:600; font-variant-numeric:tabular-nums; }
+  .pc-td.price { font-weight:600; font-variant-numeric:tabular-nums;
+    display:flex; align-items:center; gap:3px; }
+  .pc-cur { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
+  .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; }
   .pc-td.listed { color:var(--c-accent); font-variant-numeric:tabular-nums; }
   .pc-td.seller { color:var(--c-accent); }
   .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px;

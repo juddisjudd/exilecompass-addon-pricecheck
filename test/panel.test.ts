@@ -7,7 +7,14 @@
 // `test/live-search.mjs` is the counterpart that does hit the real API.
 
 import { Window } from 'happy-dom';
-import { FETCH_RESPONSE, LEAGUES_RESPONSE, RATE_HEADERS, SEARCH_RESPONSE } from './fixtures/trade';
+import {
+  FETCH_RESPONSE,
+  LEAGUES_RESPONSE,
+  NINJA_RESPONSE,
+  RATE_HEADERS,
+  SEARCH_RESPONSE,
+  STATIC_RESPONSE,
+} from './fixtures/trade';
 
 const win = new Window({ url: 'https://opaque.invalid' });
 const globals = globalThis as unknown as Record<string, unknown>;
@@ -34,6 +41,7 @@ const stats = await loadStats();
 const store = new Map<string, string>();
 
 let searchCount = 0;
+const iconRequests: string[] = [];
 let lastSort = '';
 
 const host = {
@@ -44,7 +52,10 @@ const host = {
   net: {
     fetch: async (url: string) => serve(url),
     fetchCached: async (url: string) => serve(url),
-    fetchImage: async () => 'data:image/png;base64,',
+    fetchImage: async (url: string) => {
+      iconRequests.push(url);
+      return 'data:image/png;base64,AAAA';
+    },
     request: async (opts: { url: string; method?: string; body?: string }) => {
       if (opts.method === 'POST') {
         searchCount += 1;
@@ -60,6 +71,8 @@ const host = {
 function serve(url: string): { status: number; body: string } {
   if (url.endsWith('/data/stats')) return { status: 200, body: stats };
   if (url.endsWith('/data/leagues')) return { status: 200, body: JSON.stringify(LEAGUES_RESPONSE) };
+  if (url.endsWith('/data/static')) return { status: 200, body: JSON.stringify(STATIC_RESPONSE) };
+  if (url.startsWith('https://poe.ninja/')) return { status: 200, body: JSON.stringify(NINJA_RESPONSE) };
   throw new Error(`unexpected GET: ${url}`);
 }
 
@@ -155,11 +168,53 @@ await settle(200);
 check('price sort re-runs the search', searchCount === 2, `count=${searchCount}`);
 check('and flips to descending', lastSort === '{"price":"desc"}', lastSort);
 
+// ── currency images and conversion ──────────────────────────────────────────
+
+
+
+check('every price cell shows an icon, not a word', $$('.pc-cur').length === 3, `${$$('.pc-cur').length}`);
+check(
+  'no currency name in the cell text',
+  !$$('.pc-td.price').some((n) => /exalted/i.test(String(n.textContent))),
+  $$('.pc-td.price').map((n) => n.textContent).join('/'),
+);
+check('icons went through the host cache', iconRequests.some((u) => u.includes('exalted')), iconRequests.join(','));
+check(
+  'the currency name is in the tooltip',
+  ($('.pc-td.price') as HTMLElement).title.includes('Exalted Orb'),
+  ($('.pc-td.price') as HTMLElement).title,
+);
+const amounts = () => $$('.pc-amount').map((n) => String(n.textContent).trim());
+check('amounts render as listed', amounts().includes('1') && amounts().includes('5'), amounts().join(','));
+
+// Switch the display currency; the listings convert without another search.
+const display = $$('select')[2] as HTMLSelectElement;
+const displayOptions = [...display.options].map((o) => o.value);
+check('offers "as listed" plus real currencies', displayOptions[0] === 'listed', displayOptions.join(','));
+check('offers divine', displayOptions.includes('divine'), displayOptions.join(','));
+check('offers chaos', displayOptions.includes('chaos'), displayOptions.join(','));
+
+const searchesBefore = searchCount;
+display.value = 'divine';
+display.dispatchEvent(new win.Event('change', { bubbles: true }));
+await settle(120);
+
+check('converting costs no API call', searchCount === searchesBefore, `count=${searchCount}`);
+// 1 exalted is 0.002695 divine, which must not collapse to "0".
+check('sub-unit conversions keep precision', amounts().includes('0.003'), amounts().join(','));
+check(
+  'the original price is kept in the tooltip',
+  ($('.pc-td.price') as HTMLElement).title.includes('listed as 1 exalted'),
+  ($('.pc-td.price') as HTMLElement).title,
+);
+check('the setting persists', JSON.parse(store.get('settings.v1') ?? '{}').display === 'divine');
+
 // Switching league must not leave the other market's prices on screen.
 click($$('.pc-toggle button')[1]);
 await settle();
 check('changing league clears stale listings', $$('.pc-tr').length === 0);
 check('and the footer follows', /HC Runes of Aldur/.test(text()), text().slice(0, 160));
+
 
 click($$('.pc-link').find((n) => String(n.textContent).includes('Change item')));
 await settle();

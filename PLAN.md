@@ -702,6 +702,15 @@ then falls back to the array — the same order Sidekick uses
 Rune mods have no `mods` array at all, so no tier and no range: the badge
 gutter stays empty rather than inventing one.
 
+**Only flag-derived kinds get a label.** `desecrated`, `crafted`, `fractured`
+and `mutated` come from an explicit `flags` entry on the mod, so naming them
+states something the payload asserts. `rune` and `enchant` do not: they are
+inferred from which array a mod arrived in, and `runeMods` is a grab-bag —
+it carries mods granted by a socketed rune *and* Shaman mods whose text reads
+`[ShamanOnlyMods|Bonded]: +20 to maximum Life`. Those are not runes, so a RUNE
+tag on them is wrong, and on a line that already names itself it adds nothing
+either way. They keep the colour and lose the label.
+
 **Filter rows carry a comparison** — ≥ / ≤ / = / between, as Sidekick offers.
 The API only ever takes a `{min, max}` pair, so this is presentation over the
 same two fields, but "at least 33" and "exactly 33" are different questions and

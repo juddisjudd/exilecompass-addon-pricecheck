@@ -189,9 +189,17 @@ check(
   desecratedCard.querySelectorAll('.pc-mod.explicit').length === 1,
   `${desecratedCard.querySelectorAll('.pc-mod.explicit').length}`,
 );
-// Rune mods carry no tier, so the badge gutter stays empty rather than guessing.
-check('rune mods are marked', !!desecratedCard.querySelector('.pc-mod.rune'));
+// Rune mods keep their colour but get no label: the array they arrive in is a
+// grab-bag, so "RUNE" would be wrong on the Shaman "Bonded" lines that share
+// it — and says nothing on a line that already names itself.
+check('rune mods are set apart by colour', !!desecratedCard.querySelector('.pc-mod.rune'));
+check(
+  'but not labelled',
+  ![...desecratedCard.querySelectorAll('.pc-mod.rune')].some((n) => n.querySelector('.pc-mod-kind')),
+  'a rune mod carries a kind label',
+);
 check('with the Bonded prefix unwrapped', /Bonded: \+20 to maximum Life/.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 240));
+check('and no RUNE tag beside it', !/RUNE/i.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 240));
 
 // Price, seller and age sit together on the card's right.
 check('the price is on the card', !!$('.pc-card .pc-price'), 'no price');

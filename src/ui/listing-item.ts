@@ -51,14 +51,23 @@ export function modCategory(mod: ListingMod, fallback: string): string {
   return fallback;
 }
 
-/** Kinds worth naming in the margin; the common ones speak for themselves. */
+/**
+ * Kinds worth naming, and only these: each comes from an explicit `flags`
+ * entry on the mod itself, so the label states something the payload asserts
+ * and the line does not otherwise show.
+ *
+ * `rune` and `enchant` are deliberately absent. They are inferred from which
+ * array a mod arrived in, and that array is a grab-bag — `runeMods` carries
+ * both mods granted by a socketed rune *and* Shaman "Bonded" mods, which are
+ * not runes at all. Labelling the whole array RUNE tags those wrongly, and on
+ * a line that already reads "Bonded: +20 to maximum Life" it says nothing
+ * anyway. The colour still sets them apart.
+ */
 const KIND_LABEL: Record<string, string> = {
   desecrated: 'desecrated',
   crafted: 'crafted',
   fractured: 'fractured',
   mutated: 'cultivated',
-  rune: 'rune',
-  enchant: 'enchant',
 };
 
 /** `39–51`, the range this roll came out of. */

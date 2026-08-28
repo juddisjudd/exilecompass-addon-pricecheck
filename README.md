@@ -16,11 +16,13 @@ off the response, neither of which older hosts can do.
 - Matches each modifier to its trade stat id using the stat list the trade API
   serves itself — no bundled mod database, nothing to re-release per patch.
 - Builds a search from the filters you tick, runs it, and lists the cheapest
-  matching items with their prices, sellers, and ready-made whispers.
+  matching items with their prices, sellers, and how long each has been listed.
 - Shows prices with the currency's own icon, and restates each one in your core
   currency — exalted or chaos — alongside the seller's asking price. Anything
   worth a divine or more is quoted in divines automatically. Rates come from
   poe.ninja; without them prices simply stay as listed.
+- Press a listing's icon to see the whole item — every mod with its affix name,
+  tier and roll range, implicits marked apart from explicits.
 - Softcore or hardcore, always the current challenge league — resolved from
   the API, never hardcoded.
 - Obeys GGG's published rate limits. Breaking them bans your IP from trade for

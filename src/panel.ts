@@ -62,6 +62,8 @@ interface State {
   pasteOpen: boolean;
   filtersOpen: boolean;
   localSort: SortState;
+  /** Listing ids whose full item is open. */
+  expanded: Set<string>;
   currencies: CurrencyIndex | null;
   rates: Rates | null;
 }
@@ -93,6 +95,7 @@ const mount: MountFn = async ({ root, host }) => {
     total: 0,
     queryId: '',
     status: '',
+    expanded: new Set(),
     error: '',
     busy: false,
     pasteOpen: true,
@@ -192,6 +195,7 @@ const mount: MountFn = async ({ root, host }) => {
     state.total = 0;
     state.queryId = '';
     state.localSort = { column: 'none', descending: false };
+    state.expanded.clear();
   }
 
   async function parseInput(text: string): Promise<void> {
@@ -255,6 +259,7 @@ const mount: MountFn = async ({ root, host }) => {
       state.total = outcome.total;
       state.queryId = outcome.queryId;
       state.localSort = { column: 'none', descending: false };
+    state.expanded.clear();
       state.status = outcome.total === 0 ? 'No matches.' : `${outcome.total} listings.`;
       // Prices are the answer; collapse the filters once there are some.
       if (outcome.listings.length) state.filtersOpen = false;
@@ -449,6 +454,10 @@ const mount: MountFn = async ({ root, host }) => {
       total: state.total,
       sort: state.localSort,
       priceDescending: state.settings.sort === 'price-desc',
+      expanded: state.expanded,
+      currencies: state.currencies,
+      rates: state.rates,
+      core: state.settings.core,
       onSort: (column: LocalSort) => {
         state.localSort =
           state.localSort.column === column
@@ -461,16 +470,10 @@ const mount: MountFn = async ({ root, host }) => {
         void saveSettings();
         void runSearch();
       },
-      onStatus: (message) => {
-        state.status = message;
-        renderBar();
-      },
-      currencies: state.currencies,
-      rates: state.rates,
-      core: state.settings.core,
-      onWhisper: () => {
-        // Hand focus back so the whisper can be pasted straight into chat.
-        void host.game?.get();
+      onToggleItem: (id: string) => {
+        if (state.expanded.has(id)) state.expanded.delete(id);
+        else state.expanded.add(id);
+        renderList();
       },
     });
   }

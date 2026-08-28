@@ -38,6 +38,27 @@ export const FETCH_RESPONSE = {
         baseType: 'Prismatic Ring',
         ilvl: 47,
         rarity: 'Rare',
+        identified: true,
+        requirements: [{ name: 'Level', values: [['39', 0] as [string, number]] }],
+        // Mods are objects, not strings: each carries the affix name, its tier
+        // and the range the roll came from. The text uses PoE's own link
+        // markup, which has to be unwrapped before it is readable.
+        implicitMods: [
+          {
+            description: '+10% to all [ElementalDamage|Elemental] [Resistances]',
+            mods: [{ level: 44, magnitudes: [{ min: '7', max: '10' }] }],
+          },
+        ],
+        explicitMods: [
+          {
+            description: '+43 to [Evasion] Rating',
+            mods: [{ name: "Acrobat's", tier: 'P7', magnitudes: [{ min: '39', max: '51' }] }],
+          },
+          {
+            description: '+82 to maximum Life',
+            mods: [{ name: 'Robust', tier: 'P3', magnitudes: [{ min: '70', max: '84' }] }],
+          },
+        ],
       },
     },
     {

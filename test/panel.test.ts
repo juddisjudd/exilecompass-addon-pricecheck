@@ -140,16 +140,70 @@ check('null listings are dropped', $$('.pc-tr').length === 3, `${$$('.pc-tr').le
 check('filters collapse once there are prices', !shown('.pc-filter-list'));
 check('total is reported', /78 listings/.test(text()), text().slice(-160));
 
-check('price column', headings().some((h) => h.startsWith('Price')), headings().join('|'));
-check('listed column', headings().includes('Listed'), headings().join('|'));
-check('seller column', headings().includes('Seller'), headings().join('|'));
-check('ilvl column shown for gear', headings().includes('ilvl'), headings().join('|'));
-check('no stock column for a ring', !headings().includes('Stock'), headings().join('|'));
+// Price reads from the right edge, with how long it has been listed beside it.
+const heads = headings().filter(Boolean);
+check('price is the last column', heads[heads.length - 1].startsWith('Price'), heads.join('|'));
+check('listed sits just left of it', heads[heads.length - 2] === 'Listed', heads.join('|'));
+check('seller column', heads.includes('Seller'), heads.join('|'));
+check('an item column stands in for the row', heads.includes('Item'), heads.join('|'));
+check('ilvl column shown for gear', heads.includes('ilvl'), heads.join('|'));
+check('no stock column for a ring', !heads.includes('Stock'), heads.join('|'));
+check('the whisper button is gone', $$('.pc-copy').length === 0, `${$$('.pc-copy').length}`);
+// A rare's random name says nothing, so its mods stand in for it.
+check(
+  'the summary shows the mods',
+  /\+43 to Evasion Rating/.test(String($('.pc-td.summary')?.textContent)),
+  String($('.pc-td.summary')?.textContent),
+);
+check(
+  'with the link markup unwrapped',
+  !/[[\]|]/.test(String($('.pc-td.summary')?.textContent)),
+  String($('.pc-td.summary')?.textContent),
+);
 
 const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
 check('afk seller shows as afk', dots[0] === 'afk', dots.join(','));
 check('online seller shows as online', dots[1] === 'online', dots.join(','));
 check('missing online key means offline', dots[2] === 'offline', dots.join(','));
+
+
+// ── the full item, behind the icon ──────────────────────────────────────────
+check('nothing is expanded to begin with', $$('.pc-detail').length === 0);
+const itemButtons = $$('.pc-item-btn');
+check('every row has an item button', itemButtons.length === 3, `${itemButtons.length}`);
+check('collapsed rows say so', itemButtons[0].getAttribute('aria-expanded') === 'false');
+
+const searchesBeforeExpand = searchCount;
+click(itemButtons[0]);
+await settle(80);
+
+const detail = $('.pc-detail');
+check('pressing it opens the item', !!detail, 'no detail panel');
+check('opening costs no API call', searchCount === searchesBeforeExpand, `count=${searchCount}`);
+check('and marks the button expanded', $$('.pc-item-btn')[0].getAttribute('aria-expanded') === 'true');
+
+const detailText = () => String($('.pc-detail')?.textContent ?? '').replace(/\s+/g, ' ');
+check('names the item', /Dusk Turn/.test(detailText()), detailText());
+check('shows its level requirement', /Level: 39/.test(detailText()), detailText());
+check('shows the implicit', /\+10% to all Elemental Resistances/.test(detailText()), detailText());
+check('shows every explicit', /\+43 to Evasion Rating/.test(detailText()) && /\+82 to maximum Life/.test(detailText()), detailText());
+check('with the affix name and tier', /Acrobat's P7/.test(detailText()), detailText());
+check('and the roll range it came from', /39–51/.test(detailText()), detailText());
+check('no leftover link markup', !/[[\]|]/.test(detailText()), detailText());
+check(
+  'implicits are marked apart from explicits',
+  $$('.pc-mod.implicit').length === 1 && $$('.pc-mod.explicit').length === 2,
+  `${$$('.pc-mod.implicit').length}/${$$('.pc-mod.explicit').length}`,
+);
+
+// A second row opens independently of the first.
+click($$('.pc-item-btn')[1]);
+await settle(80);
+check('rows expand independently', $$('.pc-detail').length === 2, `${$$('.pc-detail').length}`);
+
+click($$('.pc-item-btn')[0]);
+await settle(80);
+check('and close again', $$('.pc-detail').length === 1, `${$$('.pc-detail').length}`);
 
 // Local sort: ilvl ascending, then descending, with no API call either way.
 const ilvls = () => $$('.pc-td.right').map((n) => String(n.textContent).trim());

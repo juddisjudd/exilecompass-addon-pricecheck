@@ -46,6 +46,39 @@ export interface AccountOnline {
 
 export type SellerStatus = 'online' | 'afk' | 'offline';
 
+/** One rolled magnitude on a mod: the range the roll came from. */
+export interface ModMagnitude {
+  min?: string;
+  max?: string;
+}
+
+export interface ModDetail {
+  /** Affix name, e.g. `Acrobat's`. */
+  name?: string;
+  /** `P7` / `S5` — prefix or suffix, and its tier. */
+  tier?: string;
+  level?: number;
+  magnitudes?: ModMagnitude[];
+}
+
+/**
+ * A mod as the fetch endpoint returns it — an object, not a string. The
+ * description carries PoE's own markup (`[ElementalDamage|Elemental]`), and
+ * `mods[]` holds the affix name, tier and roll ranges the trade site shows.
+ */
+export interface ListingMod {
+  description?: string;
+  domain?: string;
+  hash?: string;
+  mods?: ModDetail[];
+}
+
+/** `{name, values: [[text, type]]}` — properties and requirements share it. */
+export interface ListingLine {
+  name: string;
+  values?: Array<[string, number]>;
+}
+
 export interface Listing {
   id: string;
   price: { type: string; amount: number; currency: string } | null;
@@ -62,9 +95,14 @@ export interface Listing {
     ilvl?: number;
     stackSize?: number;
     corrupted?: boolean;
-    properties?: Array<{ name: string; values: Array<[string, number]> }>;
-    explicitMods?: string[];
-    implicitMods?: string[];
+    identified?: boolean;
+    rarity?: string;
+    properties?: ListingLine[];
+    requirements?: ListingLine[];
+    implicitMods?: ListingMod[];
+    explicitMods?: ListingMod[];
+    runeMods?: ListingMod[];
+    enchantMods?: ListingMod[];
   };
 }
 

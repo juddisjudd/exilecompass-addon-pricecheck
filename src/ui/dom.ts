@@ -100,45 +100,45 @@ export const CSS = `
   .pc-th.right { text-align:right; }
   .pc-tr { border-bottom:1px solid rgba(167,154,133,.1); min-height:26px; }
   .pc-tr:hover { background:rgba(167,154,133,.07); }
+  .pc-item-btn { padding:0; border:1px solid transparent; background:none; line-height:0;
+    border-radius:2px; }
+  .pc-item-btn:hover, .pc-item-btn.on { border-color:rgba(237,230,213,.5);
+    background:rgba(167,154,133,.14); }
   .pc-icon { width:24px; height:24px; object-fit:contain; }
   .pc-td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pc-td.right { text-align:right; font-variant-numeric:tabular-nums; color:var(--c-accent); }
+  .pc-td.summary { color:var(--c-primary); }
   .pc-td.price { font-weight:600; font-variant-numeric:tabular-nums;
-    display:flex; align-items:center; gap:3px; }
+    display:flex; align-items:center; justify-content:flex-end; gap:3px; }
   .pc-cur { width:15px; height:15px; object-fit:contain; flex:0 0 auto; }
   .pc-cur-text { color:var(--c-accent); font-weight:400; font-size:10px; }
   .pc-norm { color:var(--c-accent); font-weight:400; font-size:10px; }
-  .pc-td.listed { color:var(--c-accent); font-variant-numeric:tabular-nums; }
+  .pc-td.listed { color:var(--c-accent); font-variant-numeric:tabular-nums; text-align:right; }
   .pc-td.seller { color:var(--c-accent); }
   .pc-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px;
     vertical-align:baseline; }
   .pc-dot.online { background:#5fa372; }
   .pc-dot.afk { background:#d9a441; }
   .pc-dot.offline { background:#4a4438; }
-  .pc-copy { padding:1px 5px; font-size:10px; }
   .pc-empty { padding:10px 6px; color:var(--c-accent); font-style:italic; }
+
+  /* ── expanded item ───────────────────────────────────────────────────── */
+  .pc-detail { padding:6px 9px 8px 37px; border-bottom:1px solid rgba(167,154,133,.1);
+    background:rgba(167,154,133,.05); display:flex; flex-direction:column; gap:4px; }
+  .pc-detail-head { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .pc-detail-facts { color:var(--c-accent); font-size:10px; }
+  .pc-mods { display:flex; flex-direction:column; gap:1px;
+    border-top:1px solid rgba(167,154,133,.14); padding-top:4px; }
+  .pc-mod { display:flex; align-items:baseline; gap:6px; }
+  .pc-mod-text { color:#8c9ce6; }
+  .pc-mod.implicit .pc-mod-text, .pc-mod.enchant .pc-mod-text { color:#9bc8bd; }
+  .pc-mod.rune .pc-mod-text { color:#c1a87a; }
+  .pc-mod-meta { margin-left:auto; display:flex; gap:6px; flex:0 0 auto; }
+  .pc-mod-affix { color:var(--c-accent); font-size:9.5px; }
+  .pc-mod-range { color:var(--c-accent); font-size:9.5px; font-variant-numeric:tabular-nums;
+    opacity:.8; }
 
   .pc-foot { flex:0 0 auto; font-size:9.5px; color:var(--c-accent);
     display:flex; justify-content:space-between; gap:6px; align-items:center; }
 `;
 
-/**
- * The panel's opaque origin blocks the async clipboard API, and the host's own
- * `clipboard.write` bridge is not in this ExileCompass yet, so the whisper is
- * copied the old way — which still works from inside a user gesture.
- */
-export function copyText(text: string): boolean {
-  const scratch = document.createElement('textarea');
-  scratch.value = text;
-  scratch.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-  document.body.append(scratch);
-  scratch.select();
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch {
-    ok = false;
-  }
-  scratch.remove();
-  return ok;
-}

@@ -525,7 +525,8 @@ src/
     format.ts         compact amounts: 0.003, 2.5, 371, 1.5k, 1.2m
     item.ts           compact item header + property chips (never the raw text)
     filters.ts        checkbox + min/max row per matched stat
-    results.ts        sortable listings table: price, stock, ilvl, age, seller
+    results.ts        sortable listings table; price right, item behind the icon
+    listing-item.ts   a listing's full item: mods with affix, tier and range
 test/
   parser.test.ts      fixtures for rare/plain/weapon/currency/negative rolls
   currency.test.ts    amount formatting, icon lookup, rate conversion
@@ -584,7 +585,7 @@ Ctrl+D over the game
   -> match mods against cached /data/stats
   -> render filter rows, preselected with a slight range widening
   -> user adjusts -> POST /search/<selected league> -> GET /fetch  [5.1, rate-limited]
-  -> price rows + whisper copy + trade-site link
+  -> price rows + expandable items + trade-site link
 ```
 
 ### 6.2 Results presentation
@@ -617,6 +618,32 @@ below 5 exalted. So:
   page locally, with no API call.
 
 
+
+**Row layout.** Price is the last column, right-aligned: a price list is read
+from its right edge, and how long a listing has been up sits immediately left of
+it. The seller is a fixed narrow column rather than the row's flexible one —
+worth seeing, not worth a quarter of the row.
+
+**There is no whisper button.** PoE2's in-game asynchronous trade offers are how
+people buy now, so a copied whisper is a step almost nobody takes. Removing it
+also removed the panel's only reason to touch the clipboard, and with it the
+`document.execCommand` fallback the sandbox's opaque origin forced on us.
+
+**The full item is behind the row's icon.** Sidekick renders every listing as a
+complete item card with a compact-mode toggle to escape it
+(`Trade/Items/ItemComponent.razor`); EE2 never shows the item at all. Neither
+extreme is right — a page of item cards stops being a price comparison, but you
+do need to see what you are comparing against. So the icon is a button, and it
+expands one listing in place: name, base, requirements, and every mod with its
+affix name, tier and roll range, implicits marked apart from explicits.
+
+Two details of the fetch payload make this possible and are easy to get wrong.
+`explicitMods` and friends are **objects, not strings** — `{description, mods:
+[{name, tier, magnitudes}]}` — which is where the affix and tier come from. And
+`description` carries PoE's own link markup (`[ElementalDamage|Elemental]`,
+`[Resistances]`), which reads as wiki source until it is unwrapped: `[a|b]`
+takes the second half, `[a]` the first.
+
 **Currency is shown as an icon, not a word.** `/data/static` publishes a name
 and image for every currency, keyed by exactly the id a listing's
 `price.currency` carries, so there is nothing to bundle or map by hand — Sidekick
@@ -640,7 +667,7 @@ is the one followed here (`Prices.ts`, `pathofexile-trade.ts`, `TradeItem.vue`):
   at that value. Offering divine as a core as well would be a second way to say
   the same thing;
 - the listing keeps **its own asking price**, and the restatement is appended in
-  parentheses — `5 [ex icon] (0.14 c)`. That price is what you whisper for, so
+  parentheses — `5 [ex icon] (0.14 c)`. That is the number the trade happens at, so
   substituting it would be actively unhelpful;
 - nothing is appended when it would say nothing: a listing already in the core
   currency, or a divine price that would restate as divine.

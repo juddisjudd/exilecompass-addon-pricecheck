@@ -1,9 +1,10 @@
 import type { AddonHost } from '../types';
 import type { ParsedItem } from '../parser/types';
-import { sellerStatus, type Listing } from '../trade/search';
 import { abbreviate, type CurrencyIndex, type Rates } from '../trade/currency';
-import { copyText, el } from './dom';
+import { sellerStatus, type Listing } from '../trade/search';
+import { el } from './dom';
 import { formatAmount } from './format';
+import { listingSummary, renderListingItem } from './listing-item';
 
 /**
  * Columns the page can be reordered by locally. Price is deliberately absent:
@@ -31,20 +32,29 @@ function ago(iso: string | undefined): string {
 }
 
 /**
- * `5 [exalted icon]  (0.01 div)` — the seller's own asking price, shown with
- * the currency's icon because that is what a player recognises, plus the same
- * value restated in their core currency when that says something new.
- *
- * Both reference tools inform this: Sidekick renders `amount × [icon]` with the
- * name in a tooltip, and Exiled Exchange 2 appends the normalized value in
- * parentheses rather than replacing the asking price (`TradeItem.vue`). The
- * asking price is what you will actually whisper for, so it stays primary.
+ * `(0.14 c) 5 [exalted icon]` — the seller's own asking price with the
+ * currency's icon, preceded by the same value restated in the player's core
+ * currency when that says something new. Exiled Exchange 2 appends rather than
+ * replaces (`TradeItem.vue`), and it is right to: the asking price is the
+ * number the trade itself happens at. The conversion leads here only because
+ * the column is right-aligned, which puts the asking price against the edge.
  */
 function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOptions): void {
   const price = listing.price;
   if (!price) {
     cell.textContent = '—';
     return;
+  }
+
+  const normalized = options.rates?.normalize(price.amount, price.currency, options.core) ?? null;
+  if (normalized) {
+    cell.append(
+      el(
+        'span',
+        'pc-norm',
+        `(${formatAmount(normalized.amount)} ${abbreviate(normalized.currency)})`,
+      ),
+    );
   }
 
   const meta = options.currencies?.get(price.currency);
@@ -64,17 +74,6 @@ function renderPrice(cell: HTMLElement, listing: Listing, options: ResultsOption
     cell.append(img);
   } else {
     cell.append(el('span', 'pc-cur-text', price.currency));
-  }
-
-  const normalized = options.rates?.normalize(price.amount, price.currency, options.core) ?? null;
-  if (normalized) {
-    cell.append(
-      el(
-        'span',
-        'pc-norm',
-        `(${formatAmount(normalized.amount)} ${abbreviate(normalized.currency)})`,
-      ),
-    );
   }
 
   const parts = [meta?.name ?? price.currency];
@@ -129,49 +128,71 @@ export interface ResultsOptions {
   sort: SortState;
   /** Price order lives on the server; clicking it re-runs the search. */
   priceDescending: boolean;
-  onSort: (column: LocalSort) => void;
-  onPriceSort: () => void;
-  onStatus: (message: string) => void;
-  onWhisper: (listing: Listing) => void;
+  /** Ids of the listings whose full item is open. */
+  expanded: Set<string>;
   /** Currency names and icons from /data/static. */
   currencies: CurrencyIndex | null;
   /** Exchange rates, when poe.ninja could be reached. */
   rates: Rates | null;
   /** The player's core currency, which prices are restated in. */
   core: string;
+  onSort: (column: LocalSort) => void;
+  onPriceSort: () => void;
+  onToggleItem: (id: string) => void;
 }
 
+type ColumnKey = LocalSort | 'price' | 'icon' | 'summary';
+
 interface Column {
-  key: LocalSort | 'price' | 'icon' | 'action';
+  key: ColumnKey;
   label: string;
   show: boolean;
   sortable: boolean;
   align?: 'right';
 }
 
+/**
+ * Price sits hard right, where a price list is read from, with how long it has
+ * been up immediately to its left. The seller is a fixed narrow column — worth
+ * seeing, not worth a quarter of the row, now that trades are made through the
+ * game's own async offers instead of by whispering.
+ */
+const TRACKS: Record<ColumnKey, string> = {
+  icon: '28px',
+  summary: 'minmax(0, 1fr)',
+  seller: '84px',
+  stock: '44px',
+  ilvl: '36px',
+  listed: '52px',
+  price: 'auto',
+  none: 'auto',
+};
+
 function columnsFor(options: ResultsOptions): Column[] {
   const listings = options.listings;
-  return [
-    { key: 'icon', label: '', show: true, sortable: false },
-    { key: 'price', label: 'Price', show: true, sortable: true },
-    {
-      key: 'stock',
-      label: 'Stock',
-      show: listings.some((l) => l.item.stackSize !== undefined),
-      sortable: true,
-      align: 'right',
-    },
-    {
-      key: 'ilvl',
-      label: 'ilvl',
-      show: listings.some((l) => l.item.ilvl !== undefined),
-      sortable: true,
-      align: 'right',
-    },
-    { key: 'listed', label: 'Listed', show: true, sortable: true },
-    { key: 'seller', label: 'Seller', show: true, sortable: true },
-    { key: 'action', label: '', show: true, sortable: false },
-  ].filter((c) => c.show) as Column[];
+  return (
+    [
+      { key: 'icon', label: '', show: true, sortable: false },
+      { key: 'summary', label: 'Item', show: true, sortable: false },
+      { key: 'seller', label: 'Seller', show: true, sortable: true },
+      {
+        key: 'stock',
+        label: 'Stock',
+        show: listings.some((l) => l.item.stackSize !== undefined),
+        sortable: true,
+        align: 'right',
+      },
+      {
+        key: 'ilvl',
+        label: 'ilvl',
+        show: listings.some((l) => l.item.ilvl !== undefined),
+        sortable: true,
+        align: 'right',
+      },
+      { key: 'listed', label: 'Listed', show: true, sortable: true, align: 'right' },
+      { key: 'price', label: 'Price', show: true, sortable: true, align: 'right' },
+    ] as Column[]
+  ).filter((c) => c.show);
 }
 
 function caret(active: boolean, descending: boolean): string {
@@ -199,17 +220,7 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
   const table = el('div', 'pc-table');
   // Header and rows are separate grid containers, so they need the same
   // explicit track list to line up.
-  const TRACKS: Record<string, string> = {
-    icon: '26px',
-    price: 'minmax(72px, auto)',
-    stock: '46px',
-    ilvl: '38px',
-    listed: 'minmax(56px, auto)',
-    seller: 'minmax(0, 1fr)',
-    action: 'auto',
-  };
-  const tracks = columns.map((c) => TRACKS[c.key] ?? 'auto').join(' ');
-  table.style.setProperty('--tracks', tracks);
+  table.style.setProperty('--tracks', columns.map((c) => TRACKS[c.key]).join(' '));
 
   const head = el('div', 'pc-thead');
   for (const column of columns) {
@@ -235,23 +246,35 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
 
   for (const listing of options.listings) {
     const row = el('div', 'pc-tr');
+    const open = options.expanded.has(listing.id);
 
     for (const column of columns) {
       if (column.key === 'icon') {
+        // The icon is the control: press it to see the whole item.
+        const button = el('button', `pc-item-btn${open ? ' on' : ''}`);
+        button.type = 'button';
+        button.title = open ? 'Hide the full item' : 'Show the full item';
+        button.setAttribute('aria-expanded', open ? 'true' : 'false');
         const img = el('img', 'pc-icon');
         img.alt = '';
         void iconFor(options.host, listing.item.icon).then((src) => {
           if (src) img.src = src;
         });
-        img.title = [listing.item.name, listing.item.typeLine ?? listing.item.baseType]
-          .filter(Boolean)
-          .join(' ');
-        row.append(img);
+        button.append(img);
+        button.addEventListener('click', () => options.onToggleItem(listing.id));
+        row.append(button);
         continue;
       }
-      if (column.key === 'price') {
-        const cell = el('span', 'pc-td price');
-        renderPrice(cell, listing, options);
+      if (column.key === 'summary') {
+        const summary = listingSummary(listing);
+        const cell = el('span', 'pc-td summary', summary);
+        cell.title = summary;
+        row.append(cell);
+        continue;
+      }
+      if (column.key === 'seller') {
+        const cell = el('span', 'pc-td seller', sellerLabel(listing));
+        cell.title = listing.account.name;
         row.append(cell);
         continue;
       }
@@ -273,25 +296,19 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
         row.append(cell);
         continue;
       }
-      if (column.key === 'seller') {
-        const cell = el('span', 'pc-td seller', sellerLabel(listing));
-        cell.title = listing.account.name;
-        row.append(cell);
-        continue;
-      }
 
-      const copy = el('button', 'pc-copy', 'Whisper');
-      copy.type = 'button';
-      copy.title = listing.whisper;
-      copy.addEventListener('click', () => {
-        const ok = copyText(listing.whisper);
-        options.onStatus(ok ? 'Whisper copied.' : 'Could not copy — select the text instead.');
-        if (ok) options.onWhisper(listing);
-      });
-      row.append(copy);
+      const cell = el('span', 'pc-td price');
+      renderPrice(cell, listing, options);
+      row.append(cell);
     }
 
     table.append(row);
+
+    if (open) {
+      const detail = el('div', 'pc-detail');
+      renderListingItem(detail, listing);
+      table.append(detail);
+    }
   }
 
   container.append(table);

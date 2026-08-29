@@ -89,9 +89,8 @@ const shown = (sel: string) => {
   const node = $(sel);
   return !!node && node.style.display !== 'none';
 };
-const click = (node: HTMLElement | undefined) =>
+const click = (node: HTMLElement | undefined | null) =>
   node?.dispatchEvent(new win.Event('click', { bubbles: true }));
-const headings = () => $$('th').map((n) => String(n.textContent).trim());
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = ''): void {
@@ -106,6 +105,9 @@ Prismatic Ring
 --------
 Item Level: 79
 --------
+{ Implicit Modifier — Elemental, Fire, Cold, Lightning, Resistance }
++8(7-10)% to all Elemental Resistances
+--------
 { Suffix Modifier "of the Penguin" (Tier: 7) — Elemental, Cold, Resistance }
 +15(11-15)% to Cold Resistance
 `;
@@ -114,6 +116,7 @@ await settle(120);
 check('league resolves into the footer', /Runes of Aldur/.test(text()), text().slice(0, 120));
 check('starts on the paste box', shown('.pc-paste-wrap'));
 check('no item header yet', !shown('.pc-item'));
+check('the empty state does not point left', !/on the left/.test(text()), text());
 
 const paste = $('.pc-paste') as HTMLTextAreaElement;
 paste.value = ITEM;
@@ -130,54 +133,121 @@ check('raw copy text is gone', !/Item Class:/.test(text()));
 check('property chips rendered', $$('.pc-chip').length > 0, `${$$('.pc-chip').length}`);
 check('ilvl chip present', /ilvl\s*79/.test(text()), text().slice(0, 200));
 
-const box = $('.pc-filter input[type=checkbox]') as HTMLInputElement;
+// ── filter rows ─────────────────────────────────────────────────────────────
+// A row is its text until it is ticked (Sidekick's `StatFilterComponent`):
+// the numbers only exist for a filter that is on.
+const rows = $$('.pc-filter');
+check('one row per mod line', rows.length === 2, `${rows.length}`);
+check('rows start unticked', rows.every((r) => !r.className.includes('on')));
+check('every row still carries its numbers', $$('.pc-filter .pc-range').length === 2);
+check('there is no comparison button', $$('.pc-compare').length === 0);
+check('there is no order dropdown', $$('.pc-search-wrap select').length === 0);
+
+// The player's own suffix wears the same badge the listings do.
+const suffixBadge = rows[1].querySelector('.pc-affix');
+check('the suffix is badged S7', suffixBadge?.textContent === 'S7', String(suffixBadge?.textContent));
+check('as a suffix', !!suffixBadge?.className.includes('suffix'), String(suffixBadge?.className));
+check('the implicit gets no affix badge', !rows[0].querySelector('.pc-affix'));
+check('labels are real labels', rows[0].querySelector('label.pc-label') !== null);
+
+const box = rows[1].querySelector('input[type=checkbox]') as HTMLInputElement;
 box.checked = true;
 box.dispatchEvent(new win.Event('change', { bubbles: true }));
+check('ticking marks the row on', rows[1].className.includes('on'), rows[1].className);
+check('the count follows', /1 of 2 active/.test(text()), text().slice(0, 300));
 
-click($('.pc-search') as HTMLElement);
+// Right-click clears a box, as it does in both reference tools.
+const minBox = rows[1].querySelector('.pc-range input') as HTMLInputElement;
+check('min is prefilled below the roll', minBox.value === '13', minBox.value);
+minBox.dispatchEvent(new win.Event('contextmenu', { bubbles: true, cancelable: true }));
+check('right-click clears it', minBox.value === '', minBox.value);
+minBox.value = '13';
+minBox.dispatchEvent(new win.Event('input', { bubbles: true }));
+
+// ── search ──────────────────────────────────────────────────────────────────
+check('the filters are open before a search', shown('.pc-filter-list'));
+click($('.pc-search'));
 await settle(200);
 
 check('one search ran', searchCount === 1, `count=${searchCount}`);
 check('default order is cheapest first', lastSort === '{"price":"asc"}', lastSort);
 check('null listings are dropped', $$('.pc-card').length === 3, `${$$('.pc-card').length} cards`);
 check('total is reported', /Showing 3 of 78/.test(text()), text().slice(0, 300));
+check('no separate listing count in the bar', !/78 listings\./.test(text()), text().slice(0, 300));
+
+// Once there are listings they get the height: the filters fold to their strip.
+check('the filters fold after a search', !shown('.pc-filter-list'));
+check('but their strip stays, with the count', /1 of 2 active/.test(text()), text().slice(0, 300));
+click($('.pc-filters-title'));
+check('and one click reopens them', shown('.pc-filter-list'));
+click($('.pc-filters-title'));
 
 // ── the layout is two panes ─────────────────────────────────────────────────
-// Stacked, the filters pushed the listings off the bottom. Item and filters
-// live on the left now, listings on the right, as Sidekick lays it out.
 check('there are two panes', !!$('.pc-panes'), 'no pane container');
 check('the item and filters are in the side pane', !!$('.pc-side .pc-item') && !!$('.pc-side .pc-filters'));
 check('the listings are not', !$('.pc-side .pc-card'), 'listings ended up in the side pane');
 check('search sits under the filters it acts on', !!$('.pc-side .pc-search'));
-check('the filters stay open alongside results', shown('.pc-filter-list'));
 
-// ── each listing is a card showing the item ─────────────────────────────────
+// ── each listing is one line until opened ───────────────────────────────────
+// Sidekick's compact view: name, level, age and price on a line, the full
+// item under it on click.
 const firstCard = $('.pc-card') as HTMLElement;
 const cardText = () => String(firstCard.textContent).replace(/\s+/g, ' ');
-check('the item is named', /Dusk Turn/.test(cardText()), cardText());
-check('with its base and level', /Prismatic Ring/.test(cardText()) && /Requires Level 39/.test(cardText()), cardText());
-check('the implicit is shown', /\+10% to all Elemental Resistances/.test(cardText()), cardText());
-check('and every explicit', /\+43 to Evasion Rating/.test(cardText()) && /\+82 to maximum Life/.test(cardText()), cardText());
-check('no leftover link markup', !/[[\]|]/.test(cardText()), cardText());
-check('no expansion needed to see it', $$('.pc-item-btn').length === 0, 'still behind a control');
+check('listings start compact', $$('.pc-card.open').length === 0, `${$$('.pc-card.open').length} open`);
+check('the line names the item', /Dusk Turn/.test(cardText()) && /Prismatic Ring/.test(cardText()), cardText());
+check('with its level', /ilvl 47/.test(cardText()), cardText());
+check('the price is on the line', !!firstCard.querySelector('.pc-row .pc-price'), 'no price on the row');
+check('mods are not', !/Evasion Rating/.test(cardText()), cardText());
+// Ages are relative to now, so assert the shape rather than a value that goes
+// stale the moment the fixture does.
+check(
+  'and how long it has been listed',
+  /^[0-9]+(m|h|d|mo)$/.test(String($('.pc-row-age')?.textContent).trim()),
+  String($('.pc-row-age')?.textContent),
+);
+const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
+check('afk seller shows as afk', dots[0] === 'afk', dots.join(','));
+check('online seller shows as online', dots[1] === 'online', dots.join(','));
+check('missing online key means offline', dots[2] === 'offline', dots.join(','));
+check('the seller is on the tooltip', /AfkAlchemist/.test(String($('.pc-row-age')?.title)), String($('.pc-row-age')?.title));
+
+click(firstCard.querySelector('.pc-row') as HTMLElement);
+const opened = $('.pc-card') as HTMLElement;
+const openedText = () => String(opened.textContent).replace(/\s+/g, ' ');
+check('clicking the line opens the item', opened.className.includes('open'), opened.className);
+check('only that one', $$('.pc-card.open').length === 1, `${$$('.pc-card.open').length} open`);
+check('with its requirements', /Requires Level 39/.test(openedText()), openedText());
+check('the implicit', /\+10% to all Elemental Resistances/.test(openedText()), openedText());
+check('and every explicit', /\+43 to Evasion Rating/.test(openedText()) && /\+82 to maximum Life/.test(openedText()), openedText());
+check('no leftover link markup', !/[[\]|]/.test(openedText()), openedText());
+check('and the seller', /AfkAlchemist/.test(openedText()), openedText());
 
 // Sidekick puts the affix tier in the margin, prefixes and suffixes coloured
 // apart. Ours reads the same P#/S# shorthand straight off the payload.
-const tiers = [...firstCard.querySelectorAll('.pc-affix')].filter((n) => String(n.textContent).trim());
+const tiers = [...opened.querySelectorAll('.pc-mod .pc-affix')].filter((n) => String(n.textContent).trim());
 check('affix tiers are badged', tiers.map((n) => n.textContent).join(',') === 'P7,P3', tiers.map((n) => n.textContent).join(','));
 check('prefixes are marked as prefixes', tiers.every((n) => n.className.includes('prefix')), tiers.map((n) => n.className).join('|'));
-check('roll ranges are shown', /39–51/.test(cardText()) && /70–84/.test(cardText()), cardText());
+check('roll ranges are shown', /39–51/.test(openedText()) && /70–84/.test(openedText()), openedText());
 
+click(opened.querySelector('.pc-row') as HTMLElement);
+check('clicking again closes it', $$('.pc-card.open').length === 0, `${$$('.pc-card.open').length} open`);
+
+// The header opens every listing at once, and remembers that.
+click($('.pc-expand'));
+check('Expand all opens every listing', $$('.pc-card.open').length === 3, `${$$('.pc-card.open').length} open`);
+check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').expandAll === true);
+click($$('.pc-card .pc-row')[1]);
+check('a single line can still be folded back', $$('.pc-card.open').length === 2, `${$$('.pc-card.open').length} open`);
 
 // ── properties and requirements ─────────────────────────────────────────────
 const boots = $$('.pc-card')[1] as HTMLElement;
-const bootsText = String(boots.textContent).replace(/\s+/g, ' ');
+click(boots.querySelector('.pc-row') as HTMLElement);
+const bootsText = String($$('.pc-card')[1].textContent).replace(/\s+/g, ' ');
 check('property names are unwrapped', /Energy Shield: 37/.test(bootsText), bootsText);
 check('so are requirement names', /56 Str/.test(bootsText) && /56 Int/.test(bootsText), bootsText);
 check('no link markup survives anywhere', !/[[\]|]/.test(bootsText), bootsText);
 check('properties read as a list', /Boots · Armour: 134 · Energy Shield: 37/.test(bootsText), bootsText);
 check('requirements read as the game phrases them', /Requires Level 75, 56 Str, 56 Int/.test(bootsText), bootsText);
-
 
 // A desecrated mod arrives inside explicitMods with flags, not in an array of
 // its own, so the array it came from is the wrong thing to colour it by.
@@ -201,20 +271,9 @@ check(
 check('with the Bonded prefix unwrapped', /Bonded: \+20 to maximum Life/.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 240));
 check('and no RUNE tag beside it', !/RUNE/i.test(String(desecratedCard.textContent)), String(desecratedCard.textContent).slice(0, 240));
 
-// Price, seller and age sit together on the card's right.
-check('the price is on the card', !!$('.pc-card .pc-price'), 'no price');
-check('so is the seller', /AfkAlchemist/.test(cardText()), cardText());
-// Ages are relative to now, so assert the shape rather than a value that goes
-// stale the moment the fixture does.
-check(
-  'and how long it has been listed',
-  /^[0-9]+(m|h|d|mo)$/.test(String($('.pc-card-age')?.textContent).trim()),
-  String($('.pc-card-age')?.textContent),
-);
-const dots = $$('.pc-dot').map((n) => n.className.replace('pc-dot ', ''));
-check('afk seller shows as afk', dots[0] === 'afk', dots.join(','));
-check('online seller shows as online', dots[1] === 'online', dots.join(','));
-check('missing online key means offline', dots[2] === 'offline', dots.join(','));
+// Back to compact for the rest.
+click($('.pc-expand'));
+check('Compact folds them all', $$('.pc-card.open').length === 0, `${$$('.pc-card.open').length} open`);
 
 // ── sorting, without columns to click ───────────────────────────────────────
 const cardNames = () => $$('.pc-card .pc-item-name').map((n) => String(n.textContent).trim());
@@ -259,18 +318,18 @@ check(
 // The conversion is appended, not substituted — you whisper for the asking
 // price, so that is the number that has to stay readable. And a listing
 // already in your core currency has nothing to restate, which is why these
-// fixtures (all priced in exalted, the default core) show no parenthetical.
+// fixtures (all priced in exalted, the default core) show no conversion.
 const norms = () => $$('.pc-norm').map((n) => String(n.textContent).trim());
 check('no redundant conversion for the core currency', norms().length === 0, norms().join(' '));
 
 // Switching the core currency restates them all, with no further API call.
-// The core currency now sits with the other result controls under Search, and
-// the league switch with the league name in the footer.
-const cores = $('.pc-search-controls .pc-toggle');
+// The core currency sits beside Search; the league switch with the league
+// name in the footer.
+const cores = $('.pc-search-wrap .pc-core');
 check('a core toggle is offered', !!cores, 'no toggle rendered');
-const coreButtons = [...cores.children] as HTMLElement[];
+const coreButtons = [...(cores?.children ?? [])] as HTMLElement[];
 check('with exactly two options, as in EE2', coreButtons.length === 2, `${coreButtons.length}`);
-check('labelled by abbreviation', coreButtons.map((b) => b.textContent).join(','), 'EX,C');
+check('labelled by abbreviation', coreButtons.map((b) => b.textContent).join(',') === 'EX,C', coreButtons.map((b) => b.textContent).join(','));
 
 const searchesBefore = searchCount;
 click(coreButtons[1]);
@@ -278,9 +337,7 @@ await settle(120);
 
 check('switching core costs no API call', searchCount === searchesBefore, `count=${searchCount}`);
 check('every listing now carries a conversion', norms().length === 3, norms().join(' '));
-// On its own line under the price now, so it needs no parentheses to be
-// told apart from the asking price.
-check('shown under the asking price', norms().every((t) => /^[0-9.]+ [a-z]+$/.test(t)), norms().join(' '));
+check('beside the asking price', norms().every((t) => /^[0-9.]+ [a-z]+$/.test(t)), norms().join(' '));
 check('restated in chaos', norms().every((t) => t.endsWith(' c')), norms().join(' '));
 // 1 exalted is 0.0288 chaos here; it must not collapse to "0".
 check('sub-unit conversions keep precision', norms().some((t) => /0\.0/.test(t)), norms().join(' '));
@@ -290,47 +347,15 @@ check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').core =
 // Switching league must not leave the other market's prices on screen.
 click($$('.pc-foot-league .pc-toggle button')[1]);
 await settle();
-check('changing league clears stale listings', $$('.pc-tr').length === 0);
+check('changing league clears stale listings', $$('.pc-card').length === 0, `${$$('.pc-card').length} cards left`);
 check('and the footer follows', /HC Runes of Aldur/.test(text()), text().slice(0, 160));
 
-
-
-
-// ── comparison modes ────────────────────────────────────────────────────────
-// The API only takes {min, max}, so these are four readings of the same two
-// boxes — but "at least 33" and "exactly 33" are different searches.
-const firstFilter = $('.pc-filter') as HTMLElement;
-const compare = firstFilter.querySelector('.pc-compare') as HTMLButtonElement;
-check('every filter row offers a comparison', !!compare, 'no comparison control');
-check('as a button, not a dropdown', compare.tagName === 'BUTTON', compare.tagName);
-
-const numbers = () => [...firstFilter.querySelectorAll('input[type=number]')] as HTMLElement[];
-check('defaulting to between', compare.textContent === '⇔', String(compare.textContent));
-check('which shows both boxes', numbers().every((n) => n.style.display !== 'none'));
-
-// Clicking cycles, and the tooltip carries the meaning a symbol alone cannot.
-const seen: string[] = [];
-for (let i = 0; i < 4; i += 1) {
-  click(compare);
-  await settle(20);
-  seen.push(String(compare.textContent));
-}
-check('clicking cycles through all four', seen.join(''), '≥≤=⇔');
-check('and returns to where it started', compare.textContent === '⇔');
-check('the tooltip names the mode', /click to change/.test(compare.title), compare.title);
-
-click(compare);
-await settle(20);
-check('at-least hides the max box', numbers()[1].style.display === 'none');
-click(compare);
-await settle(20);
-check('at-most hides the min box instead', numbers()[0].style.display === 'none');
-click(compare);
-await settle(20);
-check('exactly relabels the single box', (numbers()[0] as HTMLInputElement).placeholder === 'value');
+// Links are links, not boxed buttons (the generic .pc button rule used to win).
+const clear = $$('.pc-link').find((n) => String(n.textContent).includes('Clear'));
+check('Clear is offered as a link', !!clear, 'no Clear link');
 
 // Clear drops the item, its filters and its results in one go.
-click($$('.pc-link').find((n) => String(n.textContent).includes('Clear')));
+click(clear);
 await settle();
 check('Clear removes the item', !shown('.pc-item'));
 check('and its filters', $$('.pc-filter').length === 0, `${$$('.pc-filter').length} rows left`);

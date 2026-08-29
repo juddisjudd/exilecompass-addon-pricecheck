@@ -74,6 +74,8 @@ export interface ResultsOptions {
   item: ParsedItem | null;
   listings: Listing[];
   total: number;
+  /** A search has run for this item, so an empty list means no matches. */
+  searched: boolean;
   sort: SortState;
   /** Price order lives on the server; choosing it re-runs the search. */
   priceDescending: boolean;
@@ -82,25 +84,30 @@ export interface ResultsOptions {
   rates: Rates | null;
   /** The player's core currency, which prices are restated in. */
   core: string;
+  /** Every listing shown as its full item — Sidekick's non-compact view. */
+  expandAll: boolean;
+  /** Listings the user has toggled the other way from `expandAll`. */
+  toggled: Set<string>;
   onSort: (column: LocalSort) => void;
   onPriceSort: () => void;
+  onToggleAll: () => void;
+  onToggle: (id: string) => void;
 }
 
 /**
  * `1 [exalted icon]`, with the same value restated in the player's core
- * currency underneath when that says something new. Exiled Exchange 2 appends
- * rather than replaces, and it is right to: the asking price is the number the
- * trade happens at.
+ * currency beside it when that says something new. Exiled Exchange 2 appends
+ * rather than replaces, and it is right to: the asking price is the number
+ * the trade happens at.
  */
 function renderPrice(container: HTMLElement, listing: Listing, options: ResultsOptions): void {
   const price = listing.price;
   if (!price) {
-    container.append(el('div', 'pc-price', '—'));
+    container.append(el('span', 'pc-amount', '—'));
     return;
   }
 
-  const line = el('div', 'pc-price');
-  line.append(el('span', 'pc-amount', formatAmount(price.amount)));
+  container.append(el('span', 'pc-amount', formatAmount(price.amount)));
 
   const meta = options.currencies?.get(price.currency);
   if (meta?.icon && options.host.net?.fetchImage) {
@@ -108,53 +115,84 @@ function renderPrice(container: HTMLElement, listing: Listing, options: ResultsO
     img.alt = meta.name;
     img.title = meta.name;
     loadIcon(options.host, meta.icon, img);
-    line.append(img);
+    container.append(img);
   } else {
-    line.append(el('span', 'pc-cur-text', price.currency));
+    container.append(el('span', 'pc-cur-text', price.currency));
   }
-  container.append(line);
 
   const normalized = options.rates?.normalize(price.amount, price.currency, options.core) ?? null;
   if (normalized) {
     container.append(
-      el(
-        'div',
-        'pc-norm',
-        `${formatAmount(normalized.amount)} ${abbreviate(normalized.currency)}`,
-      ),
+      el('span', 'pc-norm', `${formatAmount(normalized.amount)} ${abbreviate(normalized.currency)}`),
     );
   }
 }
 
-/**
- * One listing, laid out the way Sidekick lays one out
- * (`Trade/Items/ItemComponent.razor`): the item on the left as the game would
- * show it, and what it costs and who has it on the right. A price check is a
- * comparison of items, not of rows of numbers, so the item is always visible
- * rather than hidden behind a control.
- */
-function renderCard(listing: Listing, options: ResultsOptions): HTMLElement {
-  const card = el('article', 'pc-card');
+const RARITY_CLASS: Record<string, string> = {
+  Rare: 'rare',
+  Unique: 'unique',
+  Magic: 'magic',
+};
 
+/**
+ * One listing is one line — name, level, how long it has been up, and the
+ * price — the way Sidekick's compact view (`ItemComponent.razor`, `IsCompact`)
+ * and Exiled Exchange 2's table both read. A price check is answered by
+ * scanning ten prices, and at the overlay's default size a full item card
+ * showed one. The full item opens under the line on click, or for every
+ * listing at once from the header.
+ */
+function renderRow(listing: Listing, open: boolean, options: ResultsOptions): HTMLElement {
+  const row = el('button', 'pc-row');
+  row.type = 'button';
+  row.setAttribute('aria-expanded', open ? 'true' : 'false');
+  row.title = open ? 'Hide the item' : 'Show the item';
+
+  const item = listing.item;
+  const name = el('span', 'pc-row-name');
+  const rarity = RARITY_CLASS[item.rarity ?? ''] ?? '';
+  name.append(el('span', `pc-item-name ${rarity}`.trim(), item.name || item.typeLine || 'Item'));
+  if (item.name && item.typeLine && item.typeLine !== item.name) {
+    name.append(el('span', 'pc-item-base', item.typeLine));
+  }
+  if (item.corrupted) name.append(el('span', 'pc-flag', 'corrupted'));
+  row.append(name);
+
+  row.append(el('span', 'pc-row-ilvl', item.ilvl ? `ilvl ${item.ilvl}` : ''));
+
+  const status = sellerStatus(listing);
+  const age = el('span', 'pc-row-age');
+  const dot = el('span', `pc-dot ${status}`);
+  age.append(dot, document.createTextNode(ago(listing.indexed)));
+  age.title = `${sellerLabel(listing)} (${listing.account.name}) — ${status}${
+    listing.indexed ? `, listed ${new Date(listing.indexed).toLocaleString()}` : ''
+  }`;
+  row.append(age);
+
+  const price = el('span', 'pc-price');
+  renderPrice(price, listing, options);
+  row.append(price);
+
+  row.addEventListener('click', () => options.onToggle(listing.id));
+  return row;
+}
+
+/**
+ * The item itself, as the game would show it, with who is selling it beside
+ * it — Sidekick's full card (`Trade/Items/ItemComponent.razor`). The price
+ * stays on the line above; this is what the price is for.
+ */
+function renderDetail(listing: Listing, options: ResultsOptions): HTMLElement {
   const body = el('div', 'pc-card-body');
   const left = el('div', 'pc-card-item');
-  renderListingItem(left, listing);
+  renderListingItem(left, listing, { head: false });
 
   const right = el('div', 'pc-card-side');
-  renderPrice(right, listing, options);
-
   const seller = el('div', 'pc-card-seller', sellerLabel(listing));
   seller.title = listing.account.name;
-  const status = sellerStatus(listing);
-  const dot = el('span', `pc-dot ${status}`);
-  dot.title = status;
-  seller.prepend(dot);
   right.append(seller);
-
-  const age = el('div', 'pc-card-age', ago(listing.indexed));
-  if (listing.indexed) age.title = new Date(listing.indexed).toLocaleString();
-  right.append(age);
-
+  const account = el('div', 'pc-card-account', listing.account.name);
+  right.append(account);
   if (listing.item.icon) {
     const img = el('img', 'pc-card-icon');
     img.alt = '';
@@ -163,7 +201,14 @@ function renderCard(listing: Listing, options: ResultsOptions): HTMLElement {
   }
 
   body.append(left, right);
-  card.append(body);
+  return body;
+}
+
+function renderCard(listing: Listing, options: ResultsOptions): HTMLElement {
+  const open = options.expandAll !== options.toggled.has(listing.id);
+  const card = el('article', `pc-card${open ? ' open' : ''}`);
+  card.append(renderRow(listing, open, options));
+  if (open) card.append(renderDetail(listing, options));
   return card;
 }
 
@@ -186,22 +231,20 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
   container.replaceChildren();
 
   if (!options.listings.length) {
-    container.append(
-      el(
-        'div',
-        'pc-empty',
-        options.item
-          ? 'No listings yet. Pick the modifiers that matter and run a price check.'
-          : 'Copy an item in game and paste it on the left to price check it.',
-      ),
-    );
+    let text: string;
+    if (!options.item) {
+      text = 'Copy an item in game with Ctrl+C, then paste it into the box at the top to price check it.';
+    } else if (options.searched) {
+      text = 'No listings match. Untick a modifier or lower a minimum, then search again.';
+    } else {
+      text = 'Tick the modifiers that matter, then press Search.';
+    }
+    container.append(el('div', 'pc-empty', text));
     return;
   }
 
   const head = el('div', 'pc-results-head');
-  head.append(
-    el('span', 'pc-count', `Showing ${options.listings.length} of ${options.total}`),
-  );
+  head.append(el('span', 'pc-count', `Showing ${options.listings.length} of ${options.total}`));
 
   const sorts = el('div', 'pc-sorts');
   sorts.append(
@@ -224,6 +267,18 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
     );
   }
   head.append(sorts);
+
+  // Sidekick's compact-view toggle (`ToggleCompactView.razor`), as words
+  // rather than an icon: what it does is not obvious from a glyph.
+  const expand = el('button', `pc-expand${options.expandAll ? ' on' : ''}`);
+  expand.type = 'button';
+  expand.textContent = options.expandAll ? 'Compact' : 'Expand all';
+  expand.title = options.expandAll
+    ? 'One line per listing'
+    : 'Show every listing as its full item';
+  expand.addEventListener('click', options.onToggleAll);
+  head.append(expand);
+
   container.append(head);
 
   const list = el('div', 'pc-cards');

@@ -23,7 +23,6 @@ import {
   searchUrl,
   SEARCH_POLICY,
   sortFor,
-  SORTS,
   type Listing,
   type SortKey,
 } from './trade/search';
@@ -49,9 +48,12 @@ interface Settings {
    * listings set the price.
    */
   status: string;
+  /** Server-side order. Flipped by the Price header, which re-runs the search. */
   sort: SortKey;
   /** Which currency prices are restated in — exalted or chaos, per EE2. */
   core: string;
+  /** Every listing opened to its full item, Sidekick's non-compact view. */
+  expandAll: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -59,6 +61,7 @@ const DEFAULT_SETTINGS: Settings = {
   status: 'online',
   sort: 'price-asc',
   core: CORE_CURRENCIES[0],
+  expandAll: false,
 };
 
 interface State {
@@ -75,6 +78,8 @@ interface State {
   busy: boolean;
   filtersOpen: boolean;
   localSort: SortState;
+  /** Listings toggled the other way from `settings.expandAll`. */
+  toggled: Set<string>;
   currencies: CurrencyIndex | null;
   rates: Rates | null;
 }
@@ -110,6 +115,7 @@ const mount: MountFn = async ({ root, host }) => {
     busy: false,
     filtersOpen: true,
     localSort: { column: 'none', descending: false },
+    toggled: new Set(),
     currencies: null,
     rates: null,
   };
@@ -124,10 +130,11 @@ const mount: MountFn = async ({ root, host }) => {
   let statIndex: StatIndex | null = null;
 
   // ── shell ────────────────────────────────────────────────────────────────
-  // Two columns, as Sidekick lays it out (`ItemOverlay.razor`'s
-  // LayoutTwoColumn): the item and its filters on the left, the listings on
-  // the right. Stacked, the filters pushed the prices off the bottom of the
-  // panel — the two are read together, not one after the other.
+  // Two columns when there is room, as Sidekick lays it out
+  // (`ItemOverlay.razor`'s LayoutTwoColumn): the item and its filters on the
+  // left, the listings on the right. At the overlay's default size the panes
+  // stack, and the filters fold to one line once a search has returned so the
+  // listings get the height.
   const shell = el('div', 'pc');
   const bar = el('div', 'pc-bar');
   const notice = el('div');
@@ -220,7 +227,9 @@ const mount: MountFn = async ({ root, host }) => {
     state.listings = [];
     state.total = 0;
     state.queryId = '';
+    state.status = '';
     state.localSort = { column: 'none', descending: false };
+    state.toggled = new Set();
   }
 
   async function parseInput(text: string): Promise<void> {
@@ -238,6 +247,7 @@ const mount: MountFn = async ({ root, host }) => {
     }
 
     state.item = item;
+    state.filtersOpen = true;
     state.status = 'Loading the trade stat list…';
     render();
 
@@ -283,11 +293,17 @@ const mount: MountFn = async ({ root, host }) => {
       state.total = outcome.total;
       state.queryId = outcome.queryId;
       state.localSort = { column: 'none', descending: false };
-      state.status = outcome.total === 0 ? 'No matches.' : `${outcome.total} listings.`;
+      state.toggled = new Set();
+      state.status = '';
+      // The listings are the answer, so once there are some they get the
+      // height; with none, the filters stay up because that is what needs
+      // changing. The strip reopens them with one click either way.
+      if (outcome.listings.length) state.filtersOpen = false;
     } catch (err) {
       state.error =
         err instanceof TradeError ? err.message : `Search failed: ${(err as Error).message}`;
       state.listings = [];
+      state.status = '';
     } finally {
       state.busy = false;
       render();
@@ -295,12 +311,7 @@ const mount: MountFn = async ({ root, host }) => {
   }
 
   // ── render ───────────────────────────────────────────────────────────────
-  /**
-   * The top bar carries only what is happening — the league lives in the
-   * footer beside its name, and the two controls that shape the results (what
-   * to order by, what currency to read prices in) sit under Search, with the
-   * filters they belong to. With nothing to say it takes no room at all.
-   */
+  /** Only what is happening right now — searching, waiting on the limiter. */
   function renderBar(): void {
     bar.style.display = state.status ? '' : 'none';
     bar.replaceChildren(el('div', 'pc-status', state.status));
@@ -326,8 +337,8 @@ const mount: MountFn = async ({ root, host }) => {
     return toggle;
   }
 
-  // Sidekick anchors Search at the bottom of the filter column, under
-  // everything it acts on. Same here, with the result controls beneath it.
+  // Search sits directly under the filters it acts on, with the core currency
+  // beside it. Order is not a control here: the Price header owns it.
   function renderSearch(): void {
     searchWrap.replaceChildren();
     if (!state.item) return;
@@ -338,31 +349,13 @@ const mount: MountFn = async ({ root, host }) => {
     go.addEventListener('click', () => void runSearch());
     searchWrap.append(go);
 
-    const controls = el('div', 'pc-search-controls');
-
-    const sort = el('select');
-    sort.title = 'What the search asks the API for';
-    for (const entry of SORTS) {
-      const option = el('option');
-      option.value = entry.key;
-      option.textContent = entry.label;
-      sort.append(option);
-    }
-    sort.value = state.settings.sort;
-    sort.addEventListener('change', () => {
-      state.settings.sort = sort.value as SortKey;
-      void saveSettings();
-      if (state.listings.length) void runSearch();
-    });
-    controls.append(sort);
-
     // Exiled Exchange 2 offers exactly two core currencies as radio buttons;
     // divine is not among them because `normalize` promotes to divines on its
     // own once a price is worth one. Hidden entirely without rates — a
     // converter with nothing to convert by is a control that does nothing.
     const cores = state.rates?.cores() ?? [];
     if (cores.length > 1) {
-      const core = el('div', 'pc-toggle');
+      const core = el('div', 'pc-toggle pc-core');
       for (const id of cores) {
         const button = el('button', state.settings.core === id ? 'on' : undefined);
         button.type = 'button';
@@ -375,10 +368,8 @@ const mount: MountFn = async ({ root, host }) => {
         });
         core.append(button);
       }
-      controls.append(core);
+      searchWrap.append(core);
     }
-
-    searchWrap.append(controls);
   }
 
   function renderNotice(): void {
@@ -498,12 +489,15 @@ const mount: MountFn = async ({ root, host }) => {
       item: state.item,
       listings: sortListings(state.listings, state.localSort),
       total: state.total,
+      searched: !!state.queryId,
       sort: state.localSort,
       priceSorted: state.localSort.column === 'none',
       priceDescending: state.settings.sort === 'price-desc',
       currencies: state.currencies,
       rates: state.rates,
       core: state.settings.core,
+      expandAll: state.settings.expandAll,
+      toggled: state.toggled,
       onSort: (column: LocalSort) => {
         state.localSort =
           state.localSort.column === column
@@ -519,6 +513,17 @@ const mount: MountFn = async ({ root, host }) => {
         state.localSort = { column: 'none', descending: false };
         void saveSettings();
         void runSearch();
+      },
+      onToggleAll: () => {
+        state.settings.expandAll = !state.settings.expandAll;
+        state.toggled = new Set();
+        void saveSettings();
+        renderList();
+      },
+      onToggle: (id: string) => {
+        if (state.toggled.has(id)) state.toggled.delete(id);
+        else state.toggled.add(id);
+        renderList();
       },
     });
   }

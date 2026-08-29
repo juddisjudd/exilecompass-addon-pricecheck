@@ -34,8 +34,12 @@ off the response, neither of which older hosts can do.
 2. In game, hover an item and press `Ctrl+C` — hold `Alt` (the Advanced Item
    Descriptions key) as well, to get mod tiers and roll ranges.
 3. Click the paste strip in the panel and press `Ctrl+V`. Tick the modifiers you
-   care about and adjust the numbers — the ⇔ button switches between at least,
-   at most, exactly and between — then press **Search**.
+   care about — the min/max boxes appear for each one you tick, prefilled a
+   little under what your item rolled; right-click a box to clear it — then
+   press **Search**.
+4. Each listing is one line: name, item level, how long it has been up, and
+   the price. Click a line to see the full item under it, or **Expand all** in
+   the results header to open every listing.
 
 Hotkey-driven checks over the game, without the paste step, arrive with the
 next host release.

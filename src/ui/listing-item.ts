@@ -127,20 +127,31 @@ const RARITY_CLASS: Record<string, string> = {
  * so does the card here: what you are comparing prices against is the item,
  * so it should not be hidden behind a control.
  */
-export function renderListingItem(container: HTMLElement, listing: Listing): void {
+export interface ListingItemOptions {
+  /** Name, base and level — off when the line above already shows them. */
+  head?: boolean;
+}
+
+export function renderListingItem(
+  container: HTMLElement,
+  listing: Listing,
+  options: ListingItemOptions = {},
+): void {
   const item = listing.item;
   container.replaceChildren();
 
   const head = el('div', 'pc-detail-head');
-  const rarity = RARITY_CLASS[item.rarity ?? ''] ?? '';
-  head.append(el('span', `pc-item-name ${rarity}`.trim(), item.name || item.typeLine || 'Item'));
-  if (item.name && item.typeLine && item.typeLine !== item.name) {
-    head.append(el('span', 'pc-item-base', item.typeLine));
+  if (options.head !== false) {
+    const rarity = RARITY_CLASS[item.rarity ?? ''] ?? '';
+    head.append(el('span', `pc-item-name ${rarity}`.trim(), item.name || item.typeLine || 'Item'));
+    if (item.name && item.typeLine && item.typeLine !== item.name) {
+      head.append(el('span', 'pc-item-base', item.typeLine));
+    }
+    if (item.ilvl) head.append(el('span', 'pc-item-class', `ilvl ${item.ilvl}`));
+    if (item.corrupted) head.append(el('span', 'pc-flag', 'corrupted'));
   }
-  if (item.ilvl) head.append(el('span', 'pc-item-class', `ilvl ${item.ilvl}`));
   if (item.identified === false) head.append(el('span', 'pc-flag', 'unidentified'));
-  if (item.corrupted) head.append(el('span', 'pc-flag', 'corrupted'));
-  container.append(head);
+  if (head.childElementCount) container.append(head);
 
   const properties = (item.properties ?? []).map(lineText).filter(Boolean);
   if (properties.length) {

@@ -590,19 +590,23 @@ Ctrl+D over the game
 
 ### 6.2 Results presentation
 
-The listings are the answer, so they get the space. Everything above them
-collapses once it has served its purpose: the paste box disappears the moment
-an item parses (replaced by a one-line header plus property chips — never the
-raw copied text), and the filters collapse to a `3 of 9 active` summary as soon
-as a search returns something. Both reopen on click.
+The listings are the answer, so they get the space. The overlay's default
+window (553×680) leaves the panel about **490px square** once the host's
+chrome and padding are taken off — narrower than Sidekick's fixed 768×600 and
+shorter than EE2's 460px-wide, full-height column — so everything above the
+listings collapses once it has served its purpose: the paste box empties the
+moment an item parses (replaced by a one-line header plus property chips —
+never the raw copied text), and the filters fold to a `3 of 9 active` strip as
+soon as a search returns listings (with none, they stay up: that is what needs
+changing). Both reopen on click.
 
-The listings themselves follow Exiled Exchange 2's table rather than Sidekick's
-per-listing item cards (`Trade/Items/ItemComponent.razor`, which re-renders the
-whole item and offers a compact-mode toggle to escape it). A price check is a
-comparison across sellers, and a table compares; a stack of cards does not. As
-in EE2's `TradeListing.vue`, columns are conditional on the item — stock only
-for stackables, ilvl only when the listings carry one — and seller status is a
-coloured dot (online / afk / offline) rather than a word.
+**Each listing is one line until opened.** Name, level, age and price on a
+line, as Sidekick's compact view (`ItemComponent.razor`, `IsCompact`) and
+EE2's table both read it; click the line and the full item opens under it,
+or **Expand all** in the results header opens every listing at once (Sidekick's
+`ToggleCompactView`, persisted the same way). The first version rendered every
+listing as its full card — at the default size that showed one listing, and
+with the filters open, none. Ten prices on screen is the whole point.
 
 **Sorting is split, deliberately.** `price` and `indexed` are the only sort keys
 the API accepts (anything else is a hard 400, verified live), and price order
@@ -610,43 +614,39 @@ the API accepts (anything else is a hard 400, verified live), and price order
 knows the rates, so ordering a fetched page by raw amount would rank 1 divine
 below 5 exalted. So:
 
-- the **Order** select (cheapest / most expensive / recently listed) is what the
-  search asks the API for, and decides which listings come back at all;
-- clicking **Price** flips that order and re-runs the search — one click, one
-  search, through the limiter;
+- clicking **Price** flips the server order and re-runs the search — one click,
+  one search, through the limiter. There is no separate order dropdown; there
+  was one, and it and the Price header were two controls for one thing;
 - clicking **Listed** or **ilvl** reorders the fetched
   page locally, with no API call.
 
 
 
-**Two panes, not one column.** The item and its filters sit on the left, the
-listings on the right — Sidekick's `LayoutTwoColumn` (`ItemOverlay.razor`).
-Stacked in one column, as this was, the filters and the item pushed the prices
-off the bottom of the panel, and collapsing them on a successful search only
-traded one problem for another. They are read together, so they sit side by
-side. Search anchors the bottom of the filter column, under everything it acts
-on. Below 720px the panes stack, because at that width a 312px sidebar is most
-of the screen.
+**Two panes when there is room.** Above 720px the item and its filters sit on
+the left, the listings on the right — Sidekick's `LayoutTwoColumn`
+(`ItemOverlay.razor`); they are read together, so they sit side by side.
+Below that (which includes the default window) the panes stack, because at
+that width a 312px sidebar is most of the screen. Search sits directly under
+the filters it acts on, with the core-currency switch beside it — not pinned
+to the bottom of the pane, which left a tall gap once the filters folded.
 
-**Each listing is a card, not a table row.** This went through a table first —
-including a spell as two mismatched CSS grids, which is what made the columns
-drift — and a table is the wrong shape for the content. Half of what matters
-about a listing is its mods, and mods do not fit in a cell: they were truncated
-to one ellipsised line, with the real item hidden behind an expander. Sidekick
-renders each listing as the item itself with price, seller and age beside it
-(`Trade/Items/ItemComponent.razor`), and that is what a price check compares.
-So: the item on the left of the card, always visible, and what it costs on the
-right.
+**The opened item is Sidekick's card.** Everything the game would show —
+properties, requirements, every mod with its affix, tier and roll range — with
+the seller beside it (`Trade/Items/ItemComponent.razor`). The name and price
+are not repeated; the line above already has them. Mod text is 12px, the
+host's own body size: the answer should not be smaller than the chrome.
 
 Affix tiers are badged in the margin — `P7` red, `S3` blue — exactly as
 `ItemStatLineComponent.razor` does it. The tier is the fastest read on a rare,
-and in a fixed gutter the badges line up into a scannable column. (The badge
-class is `pc-affix`, not `pc-tier`: the filter list already uses `pc-tier` for
-the *player's own* item's mod tiers, and the two are different things.)
+and in a fixed gutter the badges line up into a scannable column. The filter
+list wears the same badge on the player's own mods, so the two columns read as
+one; an implicit, which has no affix, shows a plain `T#`. Roll ranges sit
+right after their mod, dim — across the card from it, they were 900px of eye
+travel at full width.
 
-Sorting has no column headers to hang off any more, so it is three buttons
-above the list: Price re-runs the search (the server owns currency order),
-Listed and ilvl reorder the fetched page locally.
+Sorting has no column headers to hang off, so it is three buttons above the
+list: Price re-runs the search (the server owns currency order), Listed and
+ilvl reorder the fetched page locally.
 
 **There is no whisper button.** PoE2's in-game asynchronous trade offers are how
 people buy now, so a copied whisper is a step almost nobody takes. Removing it
@@ -711,17 +711,20 @@ it carries mods granted by a socketed rune *and* Shaman mods whose text reads
 tag on them is wrong, and on a line that already names itself it adds nothing
 either way. They keep the colour and lose the label.
 
-**Filter rows carry a comparison** — ≥ / ≤ / = / between, as Sidekick offers.
-The API only ever takes a `{min, max}` pair, so this is presentation over the
-same two fields, but "at least 33" and "exactly 33" are different questions and
-an empty box is a poor way to ask either. `bounds()` in `stats/filters.ts` is
-the single place that maps a comparison onto the pair.
+**Filter rows are text until ticked.** The min/max boxes only render for a
+filter that is on, as in Sidekick's `StatFilterComponent` (`FilterRange` is
+gated on `Filter.Checked`); an unticked row is a plain line of what the item
+has, and the text gets the whole width — it wraps rather than truncates,
+because a mod cut to "+143(124-151) to Evasion ..." is the one thing on the
+row that has to be readable. Right-click clears a box, as in both reference
+tools.
 
-It is a button that cycles rather than a select: the row is narrow, and a
-dropdown showing one glyph costs more width than the numbers beside it. It
-defaults to **between**, which is what the rows looked like before comparisons
-existed — a prefilled min and an open max — so the default search is unchanged
-and the other three modes are opt-in.
+There is no comparison control. There was one — a per-row ≥ / ≤ / = / ⇔
+button — and it cost 30px on every row to say something neither reference
+tool needs to say: a prefilled min and an open max *is* "at least", and typing
+a max makes it "between". The data model keeps `comparison` and `bounds()`
+(`stats/filters.ts`) so the mapping onto the API's `{min, max}` pair has one
+home; the UI leaves it at `range`.
 
 Scrollbars in the listings and the filter list are thinned rather than hidden:
 6px, transparent track, a thumb that darkens on hover. Measured in the real

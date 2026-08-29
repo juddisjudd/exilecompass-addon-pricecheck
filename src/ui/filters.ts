@@ -1,4 +1,4 @@
-import { COMPARISONS, type AnyFilterRow } from '../stats/filters';
+import type { AnyFilterRow } from '../stats/filters';
 import { el } from './dom';
 
 /** Cap borrowed from GGG's own limit on query complexity (PLAN.md §8.6). */
@@ -8,6 +8,8 @@ export interface FilterListOptions {
   rows: AnyFilterRow[];
   onChange: () => void;
 }
+
+let seq = 0;
 
 function numberInput(
   value: number | null,
@@ -22,23 +24,56 @@ function numberInput(
     const parsed = input.value.trim() === '' ? null : Number(input.value);
     onInput(parsed === null || Number.isFinite(parsed) ? parsed : null);
   });
+  // Right-click clears, as it does in both reference tools.
+  input.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    input.value = '';
+    onInput(null);
+  });
   return input;
 }
 
+/**
+ * The same `P3` / `S7` badge the listings wear, so the player's own mods and
+ * the sellers' line up as one column. Implicits carry no affix, and get none.
+ */
+function tierBadge(row: AnyFilterRow): HTMLElement | null {
+  if (row.tier === undefined) return null;
+  if (!row.affix) return el('span', 'pc-tier', `T${row.tier}`);
+  const prefix = row.affix === 'prefix';
+  const badge = el('span', `pc-affix ${prefix ? 'prefix' : 'suffix'}`, `${prefix ? 'P' : 'S'}${row.tier}`);
+  badge.title = `${prefix ? 'Prefix' : 'Suffix'}, tier ${row.tier}`;
+  return badge;
+}
+
+/**
+ * A row is its text until it is ticked; the min/max boxes only appear for a
+ * filter that is on, as in Sidekick's `StatFilterComponent`. Unticked rows
+ * read as a list of what the item has, and the text gets the whole width.
+ */
 function filterRow(row: AnyFilterRow, options: FilterListOptions): HTMLElement {
-  const wrap = el('div', 'pc-filter');
+  const wrap = el('div', `pc-filter${row.enabled ? ' on' : ''}`);
 
   const check = el('input');
   check.type = 'checkbox';
+  check.id = `pc-filter-${(seq += 1)}`;
   check.checked = row.enabled;
   check.addEventListener('change', () => {
     row.enabled = check.checked;
+    wrap.classList.toggle('on', row.enabled);
     options.onChange();
   });
 
-  const label = el('div', 'pc-label');
+  const label = el('label', 'pc-label');
+  label.htmlFor = check.id;
   label.append(document.createTextNode(row.label));
-  if (row.tier !== undefined) label.append(el('span', 'pc-tier', `T${row.tier}`));
+  // A mod's text carries its roll; a property's does not, so the value goes
+  // after the name the way the game prints it (`Physical DPS: 87.8`).
+  if (row.kind === 'equipment' && row.rolled !== null) {
+    label.append(el('span', 'pc-value', `${row.rolled}`));
+  }
+  const badge = tierBadge(row);
+  if (badge) label.append(badge);
   label.title = row.rolled === null ? row.label : `${row.label}  (rolled ${row.rolled})`;
 
   const minInput = numberInput(row.min, 'min', (value) => {
@@ -50,32 +85,10 @@ function filterRow(row: AnyFilterRow, options: FilterListOptions): HTMLElement {
     options.onChange();
   });
 
-  // A button that cycles, not a dropdown: the row is narrow, and a select
-  // showing one glyph costs more width than the numbers beside it. "At most"
-  // reads from the max box, "exactly" and "at least" from the min box, and
-  // only "between" uses both — hiding the unused one is what makes the symbol
-  // mean something.
-  const compare = el('button', 'pc-compare');
-  compare.type = 'button';
+  const range = el('div', 'pc-range');
+  range.append(minInput, maxInput);
 
-  function applyComparison(): void {
-    const mode = COMPARISONS.find((c) => c.key === row.comparison) ?? COMPARISONS[0];
-    compare.textContent = mode.symbol;
-    compare.title = `${mode.label} — click to change`;
-    minInput.style.display = row.comparison === 'max' ? 'none' : '';
-    maxInput.style.display = row.comparison === 'range' || row.comparison === 'max' ? '' : 'none';
-    minInput.placeholder = row.comparison === 'exact' ? 'value' : 'min';
-  }
-
-  compare.addEventListener('click', () => {
-    const at = COMPARISONS.findIndex((c) => c.key === row.comparison);
-    row.comparison = COMPARISONS[(at + 1) % COMPARISONS.length].key;
-    applyComparison();
-    options.onChange();
-  });
-  applyComparison();
-
-  wrap.append(check, label, compare, minInput, maxInput);
+  wrap.append(check, label, range);
   return wrap;
 }
 

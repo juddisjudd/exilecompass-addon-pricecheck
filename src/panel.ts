@@ -19,6 +19,8 @@ import {
 } from './trade/currency';
 import { buildQuery } from './trade/query';
 import {
+  fetchListings,
+  PAGE_SIZE,
   search,
   searchUrl,
   SEARCH_POLICY,
@@ -32,7 +34,13 @@ import { renderItemHeader } from './ui/item';
 import { renderResults, sortListings, type LocalSort, type SortState } from './ui/results';
 import type { MountFn } from './types';
 
-const SETTINGS_KEY = 'settings.v1';
+/**
+ * v2 dropped the stored order: v1 defaulted to cheapest-first and the default
+ * is now newest-first, and a saved default would have pinned every existing
+ * install to the old one. Everything else carries over.
+ */
+const SETTINGS_KEY = 'settings.v2';
+const LEGACY_SETTINGS_KEY = 'settings.v1';
 
 interface Settings {
   /**
@@ -48,7 +56,7 @@ interface Settings {
    * listings set the price.
    */
   status: string;
-  /** Server-side order. Flipped by the Price header, which re-runs the search. */
+  /** Server-side order. The Price and Listed headers change it and re-run the search. */
   sort: SortKey;
   /** Which currency prices are restated in — exalted or chaos, per EE2. */
   core: string;
@@ -59,7 +67,7 @@ interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   mode: 'sc',
   status: 'online',
-  sort: 'price-asc',
+  sort: 'recent',
   core: CORE_CURRENCIES[0],
   expandAll: false,
 };
@@ -73,6 +81,10 @@ interface State {
   listings: Listing[];
   total: number;
   queryId: string;
+  /** Every id the search returned, and how many of them have been fetched. */
+  ids: string[];
+  fetched: number;
+  loadingMore: boolean;
   status: string;
   error: string;
   busy: boolean;
@@ -110,6 +122,9 @@ const mount: MountFn = async ({ root, host }) => {
     listings: [],
     total: 0,
     queryId: '',
+    ids: [],
+    fetched: 0,
+    loadingMore: false,
     status: '',
     error: '',
     busy: false,
@@ -170,7 +185,16 @@ const mount: MountFn = async ({ root, host }) => {
   async function loadSettings(): Promise<void> {
     try {
       const raw = await host.storage.get(SETTINGS_KEY);
-      if (raw) state.settings = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Settings) };
+      if (raw) {
+        state.settings = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Settings) };
+        return;
+      }
+      const legacy = await host.storage.get(LEGACY_SETTINGS_KEY);
+      if (legacy) {
+        const { sort: _dropped, ...kept } = JSON.parse(legacy) as Partial<Settings>;
+        state.settings = { ...DEFAULT_SETTINGS, ...kept };
+        await saveSettings();
+      }
     } catch {
       /* defaults are fine */
     }
@@ -227,6 +251,9 @@ const mount: MountFn = async ({ root, host }) => {
     state.listings = [];
     state.total = 0;
     state.queryId = '';
+    state.ids = [];
+    state.fetched = 0;
+    state.loadingMore = false;
     state.status = '';
     state.localSort = { column: 'none', descending: false };
     state.toggled = new Set();
@@ -292,6 +319,8 @@ const mount: MountFn = async ({ root, host }) => {
       state.listings = outcome.listings;
       state.total = outcome.total;
       state.queryId = outcome.queryId;
+      state.ids = outcome.ids;
+      state.fetched = Math.min(PAGE_SIZE, outcome.ids.length);
       state.localSort = { column: 'none', descending: false };
       state.toggled = new Set();
       state.status = '';
@@ -307,6 +336,29 @@ const mount: MountFn = async ({ root, host }) => {
     } finally {
       state.busy = false;
       render();
+    }
+  }
+
+  /** The next ten of the ids the search already returned — no new search. */
+  async function loadMore(): Promise<void> {
+    if (state.busy || state.loadingMore || !state.queryId) return;
+    const next = state.ids.slice(state.fetched, state.fetched + PAGE_SIZE);
+    if (!next.length) return;
+
+    state.loadingMore = true;
+    state.error = '';
+    renderList();
+    try {
+      const page = await fetchListings(client, state.queryId, next);
+      state.listings = [...state.listings, ...page];
+      state.fetched += next.length;
+    } catch (err) {
+      state.error =
+        err instanceof TradeError ? err.message : `Loading more failed: ${(err as Error).message}`;
+    } finally {
+      state.loadingMore = false;
+      renderNotice();
+      renderList();
     }
   }
 
@@ -490,9 +542,10 @@ const mount: MountFn = async ({ root, host }) => {
       listings: sortListings(state.listings, state.localSort),
       total: state.total,
       searched: !!state.queryId,
+      remaining: state.ids.length - state.fetched,
+      loadingMore: state.loadingMore,
       sort: state.localSort,
-      priceSorted: state.localSort.column === 'none',
-      priceDescending: state.settings.sort === 'price-desc',
+      serverSort: state.settings.sort,
       currencies: state.currencies,
       rates: state.rates,
       core: state.settings.core,
@@ -505,15 +558,35 @@ const mount: MountFn = async ({ root, host }) => {
             : { column, descending: false };
         renderList();
       },
-      onPriceSort: () => {
-        // Back to the server's order, flipping direction if it was already on.
-        if (state.localSort.column === 'none') {
-          state.settings.sort = state.settings.sort === 'price-asc' ? 'price-desc' : 'price-asc';
+      onServerSort: (target) => {
+        // Price and Listed are the server's orders. Clicking the one already
+        // in force flips its direction; clicking the other switches to it.
+        // Either way it is one search — except when a local ilvl sort is the
+        // only thing on top of the order asked for, which just comes off.
+        const current = state.settings.sort;
+        const isPrice = current === 'price-asc' || current === 'price-desc';
+        const sameGroup = target === 'price' ? isPrice : !isPrice;
+        if (state.localSort.column !== 'none') {
+          state.localSort = { column: 'none', descending: false };
+          if (sameGroup) {
+            renderList();
+            return;
+          }
+        } else if (sameGroup) {
+          state.settings.sort =
+            target === 'price'
+              ? current === 'price-asc'
+                ? 'price-desc'
+                : 'price-asc'
+              : current === 'recent'
+                ? 'oldest'
+                : 'recent';
         }
-        state.localSort = { column: 'none', descending: false };
+        if (!sameGroup) state.settings.sort = target === 'price' ? 'price-asc' : 'recent';
         void saveSettings();
         void runSearch();
       },
+      onLoadMore: () => void loadMore(),
       onToggleAll: () => {
         state.settings.expandAll = !state.settings.expandAll;
         state.toggled = new Set();

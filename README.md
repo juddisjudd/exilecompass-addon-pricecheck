@@ -15,8 +15,11 @@ off the response, neither of which older hosts can do.
   copy.
 - Matches each modifier to its trade stat id using the stat list the trade API
   serves itself — no bundled mod database, nothing to re-release per patch.
-- Builds a search from the filters you tick, runs it, and lists the cheapest
-  matching items with their prices, sellers, and how long each has been listed.
+- Builds a search from the filters you tick, runs it, and lists matching items
+  newest first with their prices, sellers, and how long each has been listed.
+  The Price and Listed headers re-order on the server; **Show 10 more** pages
+  through the rest of what the search returned without spending another
+  search.
 - Shows prices with the currency's own icon, and restates each one in your core
   currency — exalted or chaos — alongside the seller's asking price. Anything
   worth a divine or more is quoted in divines automatically. Rates come from

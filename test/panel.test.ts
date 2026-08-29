@@ -41,6 +41,8 @@ const stats = await loadStats();
 const store = new Map<string, string>();
 
 let searchCount = 0;
+let fetchCount = 0;
+let lastFetchIds: string[] = [];
 const iconRequests: string[] = [];
 let lastSort = '';
 
@@ -60,7 +62,17 @@ const host = {
       if (opts.method === 'POST') {
         searchCount += 1;
         lastSort = JSON.stringify(JSON.parse(opts.body ?? '{}').sort);
-        return { status: 200, headers: RATE_HEADERS, body: JSON.stringify(SEARCH_RESPONSE) };
+        // Twelve ids: the first fetch takes ten, so two are left to page in.
+        const result = [...SEARCH_RESPONSE.result];
+        for (let i = 5; i <= 12; i += 1) result.push(`listing-${i}`);
+        return { status: 200, headers: RATE_HEADERS, body: JSON.stringify({ ...SEARCH_RESPONSE, result }) };
+      }
+      fetchCount += 1;
+      const ids = decodeURIComponent(opts.url.split('/fetch/')[1].split('?')[0]).split(',');
+      lastFetchIds = ids;
+      if (ids.includes('listing-11')) {
+        const page = ids.map((id, i) => ({ ...FETCH_RESPONSE.result[i]!, id }));
+        return { status: 200, headers: {}, body: JSON.stringify({ result: page }) };
       }
       return { status: 200, headers: {}, body: JSON.stringify(FETCH_RESPONSE) };
     },
@@ -170,7 +182,8 @@ click($('.pc-search'));
 await settle(200);
 
 check('one search ran', searchCount === 1, `count=${searchCount}`);
-check('default order is cheapest first', lastSort === '{"price":"asc"}', lastSort);
+check('default order is newest first', lastSort === '{"indexed":"desc"}', lastSort);
+check('the first page fetched ten ids', fetchCount === 1 && lastFetchIds.length === 10, `${fetchCount} fetches, ${lastFetchIds.length} ids`);
 check('null listings are dropped', $$('.pc-card').length === 3, `${$$('.pc-card').length} cards`);
 check('total is reported', /Showing 3 of 78/.test(text()), text().slice(0, 300));
 check('no separate listing count in the bar', !/78 listings\./.test(text()), text().slice(0, 300));
@@ -235,7 +248,7 @@ check('clicking again closes it', $$('.pc-card.open').length === 0, `${$$('.pc-c
 // The header opens every listing at once, and remembers that.
 click($('.pc-expand'));
 check('Expand all opens every listing', $$('.pc-card.open').length === 3, `${$$('.pc-card.open').length} open`);
-check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').expandAll === true);
+check('the choice persists', JSON.parse(store.get('settings.v2') ?? '{}').expandAll === true);
 click($$('.pc-card .pc-row')[1]);
 check('a single line can still be folded back', $$('.pc-card.open').length === 2, `${$$('.pc-card.open').length} open`);
 
@@ -275,25 +288,41 @@ check('and no RUNE tag beside it', !/RUNE/i.test(String(desecratedCard.textConte
 click($('.pc-expand'));
 check('Compact folds them all', $$('.pc-card.open').length === 0, `${$$('.pc-card.open').length} open`);
 
-// ── sorting, without columns to click ───────────────────────────────────────
+// ── sorting: the header is the row's columns ────────────────────────────────
 const cardNames = () => $$('.pc-card .pc-item-name').map((n) => String(n.textContent).trim());
+const sortBtn = (label: string) => $$('.pc-sort').find((n) => String(n.textContent).startsWith(label));
+check('the header shares the line\'s column template', !!$('.pc-results-head.pc-cols') && !!$('.pc-row.pc-cols'));
+check('sort buttons run ilvl, Listed, Price — the column order', $$('.pc-sort').map((n) => String(n.textContent).split(' ')[0]).join(',') === 'ilvl,Listed,Price', $$('.pc-sort').map((n) => n.textContent).join(','));
+check('Listed is the order in force, newest first', /Listed\s*↓/.test(String(sortBtn('Listed')?.textContent)) && sortBtn('Listed')?.className.includes('on') === true, String(sortBtn('Listed')?.textContent));
 check('starts in the order the server returned', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre', cardNames().join(','));
 
 const searchesBeforeSort = searchCount;
-click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
+click(sortBtn('ilvl'));
 await settle();
 check('ilvl sorts ascending', cardNames().join(',') === 'Dusk Turn,Rift Gyre,Blood Band', cardNames().join(','));
-click($$('.pc-sort').find((n) => String(n.textContent).startsWith('ilvl')));
+click(sortBtn('ilvl'));
 await settle();
 check('clicking again reverses it', cardNames().join(',') === 'Blood Band,Rift Gyre,Dusk Turn', cardNames().join(','));
 check('the active sort is marked', /ilvl\s*↓/.test(text()));
 check('local sorting costs no API call', searchCount === searchesBeforeSort, `count=${searchCount}`);
 
-// Price order belongs to the server, so choosing it re-runs the search.
-click($$('.pc-sort').find((n) => String(n.textContent).startsWith('Price')));
+// Listed is already what the server ordered by, so taking the local sort off
+// needs no search; a second click flips it to oldest first, which does.
+click(sortBtn('Listed'));
 await settle(200);
-check('price sort re-runs the search', searchCount === 2, `count=${searchCount}`);
-check('and returns to the server order', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre', cardNames().join(','));
+check('back to the server order without a search', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre' && searchCount === searchesBeforeSort, `count=${searchCount} ${cardNames().join(',')}`);
+click(sortBtn('Listed'));
+await settle(200);
+check('flipping Listed re-runs the search', searchCount === searchesBeforeSort + 1, `count=${searchCount}`);
+check('oldest first', lastSort === '{"indexed":"asc"}', lastSort);
+
+// Price order belongs to the server, so choosing it re-runs the search.
+click(sortBtn('Price'));
+await settle(200);
+check('price sort re-runs the search', searchCount === searchesBeforeSort + 2, `count=${searchCount}`);
+check('cheapest first', lastSort === '{"price":"asc"}', lastSort);
+check('and is marked in force', sortBtn('Price')?.className.includes('on') === true && /Price\s*↑/.test(String(sortBtn('Price')?.textContent)), String(sortBtn('Price')?.textContent));
+check('in the server order', cardNames().join(',') === 'Dusk Turn,Blood Band,Rift Gyre', cardNames().join(','));
 
 // ── currency images and conversion ──────────────────────────────────────────
 check('every price shows an icon, not a word', $$('.pc-cur').length === 3, `${$$('.pc-cur').length}`);
@@ -342,7 +371,22 @@ check('restated in chaos', norms().every((t) => t.endsWith(' c')), norms().join(
 // 1 exalted is 0.0288 chaos here; it must not collapse to "0".
 check('sub-unit conversions keep precision', norms().some((t) => /0\.0/.test(t)), norms().join(' '));
 check('never a raw float', !norms().some((t) => /\.\d{3,}/.test(t)), norms().join(' '));
-check('the choice persists', JSON.parse(store.get('settings.v1') ?? '{}').core === 'chaos');
+check('the choice persists', JSON.parse(store.get('settings.v2') ?? '{}').core === 'chaos');
+
+// ── paging ──────────────────────────────────────────────────────────────────
+// The search returned twelve ids and the first fetch took ten; the other two
+// come from the fetch endpoint, not another search.
+const more = $('.pc-more');
+check('the rest are offered', /Show 2 more/.test(String(more?.textContent)), String(more?.textContent));
+const searchesBeforeMore = searchCount;
+click(more);
+await settle(200);
+check('loading more spends no search', searchCount === searchesBeforeMore, `count=${searchCount}`);
+check('and fetched the remaining ids', lastFetchIds.join(',') === 'listing-11,listing-12', lastFetchIds.join(','));
+check('the new listings are appended', $$('.pc-card').length === 5, `${$$('.pc-card').length} cards`);
+check('the count follows', /Showing 5 of 78/.test(text()), text().slice(0, 300));
+check('nothing more to page', !$('.pc-more'));
+check('and the trade site is named for the rest', /rest are on the trade site/.test(text()), text().slice(-200));
 
 // Switching league must not leave the other market's prices on screen.
 click($$('.pc-foot-league .pc-toggle button')[1]);

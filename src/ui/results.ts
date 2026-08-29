@@ -1,17 +1,17 @@
 import type { AddonHost } from '../types';
 import type { ParsedItem } from '../parser/types';
 import { abbreviate, type CurrencyIndex, type Rates } from '../trade/currency';
-import { sellerStatus, type Listing } from '../trade/search';
+import { PAGE_SIZE, sellerStatus, type Listing, type SortKey } from '../trade/search';
 import { el } from './dom';
 import { formatAmount } from './format';
 import { renderListingItem } from './listing-item';
 
 /**
- * How the fetched page is ordered. Price is not among them: listings are
- * priced in different currencies and only the API knows the rates, so price
- * order is asked of the server and arrives already sorted.
+ * What can be reordered locally: only item level. Price and listing age are
+ * server sorts — listings are priced in different currencies and only the
+ * API knows the rates, and age order across pages is the server's to keep.
  */
-export type LocalSort = 'listed' | 'ilvl' | 'none';
+export type LocalSort = 'ilvl' | 'none';
 
 export interface SortState {
   column: LocalSort;
@@ -35,20 +35,9 @@ function sellerLabel(listing: Listing): string {
   return listing.account.lastCharacterName ?? listing.account.name.split('#')[0];
 }
 
-function compare(a: Listing, b: Listing, column: LocalSort): number {
-  switch (column) {
-    case 'listed':
-      return Date.parse(a.indexed ?? '') - Date.parse(b.indexed ?? '');
-    case 'ilvl':
-      return (a.item.ilvl ?? 0) - (b.item.ilvl ?? 0);
-    default:
-      return 0;
-  }
-}
-
 export function sortListings(listings: Listing[], state: SortState): Listing[] {
   if (state.column === 'none') return listings;
-  const sorted = [...listings].sort((a, b) => compare(a, b, state.column));
+  const sorted = [...listings].sort((a, b) => (a.item.ilvl ?? 0) - (b.item.ilvl ?? 0));
   return state.descending ? sorted.reverse() : sorted;
 }
 
@@ -76,10 +65,12 @@ export interface ResultsOptions {
   total: number;
   /** A search has run for this item, so an empty list means no matches. */
   searched: boolean;
+  /** Ids the search returned that have not been fetched yet. */
+  remaining: number;
+  loadingMore: boolean;
   sort: SortState;
-  /** Price order lives on the server; choosing it re-runs the search. */
-  priceDescending: boolean;
-  priceSorted: boolean;
+  /** What the server ordered by. Changing it re-runs the search. */
+  serverSort: SortKey;
   currencies: CurrencyIndex | null;
   rates: Rates | null;
   /** The player's core currency, which prices are restated in. */
@@ -89,7 +80,8 @@ export interface ResultsOptions {
   /** Listings the user has toggled the other way from `expandAll`. */
   toggled: Set<string>;
   onSort: (column: LocalSort) => void;
-  onPriceSort: () => void;
+  onServerSort: (target: 'price' | 'listed') => void;
+  onLoadMore: () => void;
   onToggleAll: () => void;
   onToggle: (id: string) => void;
 }
@@ -141,21 +133,27 @@ const RARITY_CLASS: Record<string, string> = {
  * scanning ten prices, and at the overlay's default size a full item card
  * showed one. The full item opens under the line on click, or for every
  * listing at once from the header.
+ *
+ * The line and the header share one column template (`.pc-cols`), so each
+ * sort button sits over the column it sorts.
  */
 function renderRow(listing: Listing, open: boolean, options: ResultsOptions): HTMLElement {
-  const row = el('button', 'pc-row');
+  const row = el('button', 'pc-row pc-cols');
   row.type = 'button';
   row.setAttribute('aria-expanded', open ? 'true' : 'false');
-  row.title = open ? 'Hide the item' : 'Show the item';
 
   const item = listing.item;
   const name = el('span', 'pc-row-name');
   const rarity = RARITY_CLASS[item.rarity ?? ''] ?? '';
-  name.append(el('span', `pc-item-name ${rarity}`.trim(), item.name || item.typeLine || 'Item'));
+  const title = item.name || item.typeLine || 'Item';
+  name.append(el('span', `pc-item-name ${rarity}`.trim(), title));
   if (item.name && item.typeLine && item.typeLine !== item.name) {
     name.append(el('span', 'pc-item-base', item.typeLine));
   }
   if (item.corrupted) name.append(el('span', 'pc-flag', 'corrupted'));
+  name.title = `${item.name && item.typeLine !== item.name ? `${item.name} ${item.typeLine ?? ''}` : title}${
+    open ? ' — click to hide the item' : ' — click to show the item'
+  }`;
   row.append(name);
 
   row.append(el('span', 'pc-row-ilvl', item.ilvl ? `ilvl ${item.ilvl}` : ''));
@@ -227,6 +225,56 @@ function sortButton(
   return button;
 }
 
+/**
+ * The header is the row's column template with a sort button in each
+ * column, so PRICE sits over the prices and LISTED over the ages. Price and
+ * Listed are server orders (re-run the search); ilvl is local.
+ */
+function renderHead(options: ResultsOptions): HTMLElement {
+  const head = el('div', 'pc-results-head pc-cols');
+
+  const left = el('div', 'pc-head-left');
+  left.append(el('span', 'pc-count', `Showing ${options.listings.length} of ${options.total}`));
+  // Sidekick's compact-view toggle (`ToggleCompactView.razor`), as words
+  // rather than an icon: what it does is not obvious from a glyph.
+  const expand = el('button', `pc-expand${options.expandAll ? ' on' : ''}`);
+  expand.type = 'button';
+  expand.textContent = options.expandAll ? 'Compact' : 'Expand all';
+  expand.title = options.expandAll ? 'One line per listing' : 'Show every listing as its full item';
+  expand.addEventListener('click', options.onToggleAll);
+  left.append(expand);
+  head.append(left);
+
+  const local = options.sort.column !== 'none';
+  const priceOrder = options.serverSort === 'price-asc' || options.serverSort === 'price-desc';
+
+  const ilvl = sortButton('ilvl', local, options.sort.descending, () => options.onSort('ilvl'));
+  if (!options.listings.some((l) => l.item.ilvl !== undefined)) ilvl.disabled = true;
+  head.append(ilvl);
+
+  head.append(
+    sortButton(
+      'Listed',
+      !local && !priceOrder,
+      options.serverSort !== 'oldest',
+      () => options.onServerSort('listed'),
+      'Newest or oldest first — the server orders, so this re-runs the search.',
+    ),
+  );
+
+  const price = sortButton(
+    'Price',
+    !local && priceOrder,
+    options.serverSort === 'price-desc',
+    () => options.onServerSort('price'),
+    'Currencies only compare on the server — this re-runs the search.',
+  );
+  price.classList.add('pc-sort-end');
+  head.append(price);
+
+  return head;
+}
+
 export function renderResults(container: HTMLElement, options: ResultsOptions): void {
   container.replaceChildren();
 
@@ -243,45 +291,29 @@ export function renderResults(container: HTMLElement, options: ResultsOptions): 
     return;
   }
 
-  const head = el('div', 'pc-results-head');
-  head.append(el('span', 'pc-count', `Showing ${options.listings.length} of ${options.total}`));
-
-  const sorts = el('div', 'pc-sorts');
-  sorts.append(
-    sortButton(
-      'Price',
-      options.priceSorted,
-      options.priceDescending,
-      options.onPriceSort,
-      'Currencies only compare on the server — this re-runs the search.',
-    ),
-    sortButton('Listed', options.sort.column === 'listed', options.sort.descending, () =>
-      options.onSort('listed'),
-    ),
-  );
-  if (options.listings.some((l) => l.item.ilvl !== undefined)) {
-    sorts.append(
-      sortButton('ilvl', options.sort.column === 'ilvl', options.sort.descending, () =>
-        options.onSort('ilvl'),
-      ),
-    );
-  }
-  head.append(sorts);
-
-  // Sidekick's compact-view toggle (`ToggleCompactView.razor`), as words
-  // rather than an icon: what it does is not obvious from a glyph.
-  const expand = el('button', `pc-expand${options.expandAll ? ' on' : ''}`);
-  expand.type = 'button';
-  expand.textContent = options.expandAll ? 'Compact' : 'Expand all';
-  expand.title = options.expandAll
-    ? 'One line per listing'
-    : 'Show every listing as its full item';
-  expand.addEventListener('click', options.onToggleAll);
-  head.append(expand);
-
-  container.append(head);
+  container.append(renderHead(options));
 
   const list = el('div', 'pc-cards');
   for (const listing of options.listings) list.append(renderCard(listing, options));
+
+  // The search hands back up to 100 ids; each fetch takes ten of them. Paging
+  // through spends the fetch budget, not the search one (Sidekick's
+  // `LoadMoreData`). Past the ids the search gave, the trade site has the rest.
+  if (options.remaining > 0) {
+    const more = el(
+      'button',
+      'pc-more',
+      options.loadingMore ? 'Loading…' : `Show ${Math.min(PAGE_SIZE, options.remaining)} more`,
+    );
+    more.type = 'button';
+    more.disabled = options.loadingMore;
+    more.addEventListener('click', options.onLoadMore);
+    list.append(more);
+  } else if (options.total > options.listings.length) {
+    list.append(
+      el('div', 'pc-more-note', `That is every listing the search returned; the rest are on the trade site.`),
+    );
+  }
+
   container.append(list);
 }

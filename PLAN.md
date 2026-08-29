@@ -614,11 +614,25 @@ the API accepts (anything else is a hard 400, verified live), and price order
 knows the rates, so ordering a fetched page by raw amount would rank 1 divine
 below 5 exalted. So:
 
-- clicking **Price** flips the server order and re-runs the search — one click,
-  one search, through the limiter. There is no separate order dropdown; there
-  was one, and it and the Price header were two controls for one thing;
-- clicking **Listed** or **ilvl** reorders the fetched
-  page locally, with no API call.
+- the default order is **newest first** (`indexed: desc`); clicking **Listed**
+  flips it to oldest first (`indexed: asc`, accepted live) and back, and
+  clicking **Price** switches to cheapest first, then flips. Each is one
+  search, through the limiter. There is no separate order dropdown; there was
+  one, and it and the headers were two controls for one thing;
+- clicking **ilvl** reorders the fetched listings locally, with no API call.
+  Clicking the header already in force with a local sort on top just takes the
+  local sort off — no search.
+
+The header and every listing share one CSS grid template (`.pc-cols`), so
+each sort button sits over the column it sorts: ilvl over the levels, Listed
+over the ages, Price over the prices.
+
+**Paging.** A search returns up to 100 ids and a fetch takes ten of them, so
+**Show 10 more** at the foot of the list fetches the next ten without another
+search — the fetch endpoint has its own rate-limit policy
+(`trade-fetch-request-limit`), so paging never spends the search budget.
+Sidekick's `LoadMoreData` does the same. Past the ids the search gave, the
+list says so and the footer link opens the full search on the trade site.
 
 
 

@@ -129,21 +129,26 @@ export const CSS = `
 
   /* ── results ─────────────────────────────────────────────────────────── */
   .pc-results { min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+  /* One column template for the header and every line, so each sort button
+     sits over the column it sorts. The header's extra 1px of side padding
+     matches the card border the lines sit inside. */
+  .pc-cols { display:grid; grid-template-columns:minmax(0,1fr) 46px 54px 112px;
+    gap:8px; align-items:center; }
   .pc-results-head { position:sticky; top:0; z-index:1; background:var(--c-bg,#0b0a08);
-    display:flex; align-items:center; gap:6px; padding:2px 0 4px;
-    border-bottom:1px solid rgba(167,154,133,.18); }
-  .pc-count { font-size:10.5px; color:var(--c-accent); }
-  .pc-sorts { margin-left:auto; display:flex; gap:3px; }
-  .pc .pc-sort, .pc .pc-expand { background:none; border:1px solid transparent; padding:2px 6px;
-    text-align:center; font-size:10px; font-weight:700; letter-spacing:.06em;
-    text-transform:uppercase; color:var(--c-accent); cursor:pointer; }
-  .pc .pc-sort { min-width:54px; }
-  .pc .pc-sort:hover, .pc .pc-expand:hover { color:var(--c-primary);
-    border-color:rgba(167,154,133,.3); }
-  .pc .pc-sort.on, .pc .pc-expand.on { color:var(--c-primary);
-    border-color:rgba(237,230,213,.45); background:rgba(167,154,133,.14); }
-  .pc .pc-expand { border-left:1px solid rgba(167,154,133,.18); margin-left:3px;
-    padding-left:9px; text-transform:none; letter-spacing:0; font-weight:600; }
+    padding:2px 9px 4px; border-bottom:1px solid rgba(167,154,133,.18); }
+  .pc-head-left { display:flex; align-items:center; gap:8px; min-width:0; }
+  .pc-count { font-size:10.5px; color:var(--c-accent); white-space:nowrap; }
+  .pc .pc-sort, .pc .pc-expand { background:none; border:1px solid transparent; padding:2px 0;
+    font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--c-accent); cursor:pointer; text-align:left; justify-self:start;
+    white-space:nowrap; }
+  .pc .pc-sort-end { text-align:right; justify-self:end; }
+  .pc .pc-sort:hover:not(:disabled), .pc .pc-expand:hover { color:var(--c-primary); }
+  .pc .pc-sort.on, .pc .pc-expand.on { color:var(--c-primary); }
+  .pc .pc-sort:disabled { opacity:.35; cursor:default; }
+  .pc .pc-expand { text-transform:none; letter-spacing:0; font-weight:600; padding:2px 6px;
+    border-color:rgba(167,154,133,.25); }
+  .pc .pc-expand.on { border-color:rgba(237,230,213,.45); background:rgba(167,154,133,.14); }
 
   .pc-cards { display:flex; flex-direction:column; gap:3px; padding-bottom:4px; }
   .pc-card { border:1px solid rgba(167,154,133,.18); background:rgba(167,154,133,.03); }
@@ -151,21 +156,20 @@ export const CSS = `
   .pc-card.open { background:rgba(167,154,133,.05); }
 
   /* One listing, one line. */
-  .pc .pc-row { display:flex; align-items:center; gap:8px; width:100%; min-height:26px;
-    padding:3px 8px; background:none; border:none; text-align:left; font-size:12px;
-    color:var(--c-primary); cursor:pointer; }
+  .pc .pc-row { width:100%; min-height:26px; padding:3px 8px; background:none; border:none;
+    text-align:left; font-size:12px; color:var(--c-primary); cursor:pointer; }
   .pc .pc-row:hover { background:rgba(167,154,133,.08); }
-  .pc-row-name { flex:1 1 auto; min-width:0; display:flex; align-items:baseline; gap:6px;
+  .pc-row-name { min-width:0; display:flex; align-items:baseline; gap:6px;
     overflow:hidden; white-space:nowrap; }
   .pc-row-name .pc-item-name { overflow:hidden; text-overflow:ellipsis; }
   .pc-row-name .pc-item-base { overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; }
-  .pc-row-ilvl { flex:0 0 auto; min-width:44px; color:var(--c-accent); font-size:11px;
-    font-variant-numeric:tabular-nums; }
-  .pc-row-age { flex:0 0 auto; min-width:40px; display:inline-flex; align-items:center;
-    color:var(--c-accent); font-size:11px; font-variant-numeric:tabular-nums; }
-  .pc-price { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:flex-end;
-    gap:4px; min-width:88px; font-weight:700; font-size:13px;
-    font-variant-numeric:tabular-nums; color:var(--c-primary); }
+  .pc-row-ilvl { color:var(--c-accent); font-size:11px; font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  .pc-row-age { display:inline-flex; align-items:center; color:var(--c-accent); font-size:11px;
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pc-price { min-width:0; display:inline-flex; align-items:center; justify-content:flex-end;
+    gap:4px; font-weight:700; font-size:13px; font-variant-numeric:tabular-nums;
+    color:var(--c-primary); white-space:nowrap; }
   .pc-cur { width:17px; height:17px; object-fit:contain; }
   .pc-cur-text { font-size:10px; font-weight:400; color:var(--c-accent); }
   .pc-norm { font-size:10.5px; font-weight:400; color:var(--c-accent);
@@ -176,6 +180,11 @@ export const CSS = `
   .pc-dot.afk { background:#d9a441; }
   .pc-dot.offline { background:#4a4438; }
   .pc-empty { padding:10px 6px; color:var(--c-accent); font-style:italic; }
+  .pc .pc-more { width:100%; margin-top:2px; padding:5px; background:none;
+    border:1px dashed rgba(167,154,133,.3); color:var(--c-accent); font-size:11px; }
+  .pc .pc-more:hover:not(:disabled) { color:var(--c-primary); border-style:solid; }
+  .pc-more-note { text-align:center; font-size:10.5px; color:var(--c-accent); padding:6px;
+    font-style:italic; }
 
   /* ── the item, opened under its line ─────────────────────────────────── */
   .pc-card-body { display:grid; grid-template-columns:minmax(0,1fr) 112px;

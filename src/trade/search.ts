@@ -4,8 +4,8 @@ import type { TradeRequest } from './query';
 export const SEARCH_POLICY = 'trade-search-request-limit';
 export const FETCH_POLICY = 'trade-fetch-request-limit';
 
-/** How many listings one price check pulls. Fetch takes at most 10 ids. */
-export const RESULT_LIMIT = 10;
+/** How many listings one fetch pulls. The endpoint takes at most 10 ids. */
+export const PAGE_SIZE = 10;
 
 /**
  * What the API will order by. `price` and `indexed` are the only keys it
@@ -15,12 +15,13 @@ export const RESULT_LIMIT = 10;
  * currencies, and only GGG knows today's rates between them. Sorting a fetched
  * page by raw amount would put 1 divine below 5 exalted.
  */
-export type SortKey = 'price-asc' | 'price-desc' | 'recent';
+export type SortKey = 'price-asc' | 'price-desc' | 'recent' | 'oldest';
 
 export const SORTS: Array<{ key: SortKey; label: string; sort: Record<string, string> }> = [
+  { key: 'recent', label: 'Recently listed', sort: { indexed: 'desc' } },
+  { key: 'oldest', label: 'Oldest listed', sort: { indexed: 'asc' } },
   { key: 'price-asc', label: 'Cheapest first', sort: { price: 'asc' } },
   { key: 'price-desc', label: 'Most expensive', sort: { price: 'desc' } },
-  { key: 'recent', label: 'Recently listed', sort: { indexed: 'desc' } },
 ];
 
 export function sortFor(key: SortKey): Record<string, string> {
@@ -125,6 +126,13 @@ interface FetchResponse {
 export interface SearchOutcome {
   queryId: string;
   total: number;
+  /**
+   * Every id the search returned, in the server's order — up to 100. The
+   * first page is fetched here; `fetchListings` pulls the rest ten at a time
+   * without another search, so paging spends the fetch budget, not the
+   * search one.
+   */
+  ids: string[];
   listings: Listing[];
 }
 
@@ -139,28 +147,19 @@ export function searchUrl(league: string, queryId: string): string {
   return `${TRADE_SITE}/${encodeURIComponent(league)}/${encodeURIComponent(queryId)}`;
 }
 
-export async function search(
+/** One page of listings for ids a search returned. At most `PAGE_SIZE` ids. */
+export async function fetchListings(
   client: TradeClient,
-  league: string,
-  request: TradeRequest,
-  limit = RESULT_LIMIT,
-): Promise<SearchOutcome> {
-  const res = await client.request(SEARCH_POLICY, {
-    url: `${TRADE_BASE}/search/${encodeURIComponent(league)}`,
-    method: 'POST',
-    body: request,
-  });
-
-  const found = JSON.parse(res.body) as SearchResponse;
-  const ids = (found.result ?? []).slice(0, limit);
-  if (!ids.length) return { queryId: found.id, total: found.total ?? 0, listings: [] };
-
+  queryId: string,
+  ids: string[],
+): Promise<Listing[]> {
+  if (!ids.length) return [];
   const fetched = await client.request(FETCH_POLICY, {
-    url: `${TRADE_BASE}/fetch/${ids.join(',')}?query=${encodeURIComponent(found.id)}`,
+    url: `${TRADE_BASE}/fetch/${ids.slice(0, PAGE_SIZE).join(',')}?query=${encodeURIComponent(queryId)}`,
   });
 
   const payload = JSON.parse(fetched.body) as FetchResponse;
-  const listings: Listing[] = (payload.result ?? [])
+  return (payload.result ?? [])
     .filter((entry): entry is NonNullable<FetchResponse['result'][number]> => entry !== null)
     .map((entry) => ({
       id: entry.id,
@@ -171,8 +170,23 @@ export async function search(
       indexed: entry.listing.indexed,
       item: entry.item,
     }));
+}
 
-  return { queryId: found.id, total: found.total ?? listings.length, listings };
+export async function search(
+  client: TradeClient,
+  league: string,
+  request: TradeRequest,
+): Promise<SearchOutcome> {
+  const res = await client.request(SEARCH_POLICY, {
+    url: `${TRADE_BASE}/search/${encodeURIComponent(league)}`,
+    method: 'POST',
+    body: request,
+  });
+
+  const found = JSON.parse(res.body) as SearchResponse;
+  const ids = found.result ?? [];
+  const listings = await fetchListings(client, found.id, ids.slice(0, PAGE_SIZE));
+  return { queryId: found.id, total: found.total ?? listings.length, ids, listings };
 }
 
 /** GGG's own words for a query the engine refuses (PLAN.md §8.6). */

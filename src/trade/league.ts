@@ -9,78 +9,86 @@ export interface TradeLeague {
   text?: string;
 }
 
-export interface LeaguePair {
+/** One challenge league and its hardcore twin — the two halves of one market. */
+export interface LeagueFamily {
   sc: TradeLeague;
   hc: TradeLeague | null;
 }
 
-const CACHE_KEY = 'league.v1';
+const CACHE_KEY = 'league.v2';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
 /**
- * `/data/leagues` lists the current softcore challenge league first, then its
- * hardcore twin (`HC ` + the same id), then Standard and Hardcore. Only the
- * two current ones are markets anyone price-checks against — Standard and
- * Hardcore are where characters land when a league ends — so they are
- * filtered out here rather than offered. See PLAN.md §2.1.
+ * `/data/leagues` lists each challenge league's softcore entry followed by its
+ * hardcore twin (`HC ` + the same id), newest first, then Standard and
+ * Hardcore. Those last two are where characters land when a league ends, not
+ * markets anyone price-checks against, so they are filtered out rather than
+ * offered. See PLAN.md §2.1.
+ *
+ * Every challenge league is kept, not only the newest: for the first weeks of
+ * a new league the previous one is still live, and someone with characters
+ * there is asking about a real market.
  */
-export function classify(leagues: TradeLeague[]): LeaguePair {
+export function classify(leagues: TradeLeague[]): LeagueFamily[] {
   const poe2 = leagues.filter((l) => !l.realm || l.realm === 'poe2');
   const challenge = poe2.filter((l) => l.id !== 'Standard' && l.id !== 'Hardcore');
-  const sc = challenge.find((l) => !l.id.startsWith('HC '));
-  if (!sc) throw new TradeError('No current league found in the trade API response.');
-  const hc =
-    challenge.find((l) => l.id === `HC ${sc.id}`) ??
-    challenge.find((l) => l.id.startsWith('HC ')) ??
-    null;
-  return { sc, hc };
+  const families = challenge
+    .filter((l) => !l.id.startsWith('HC '))
+    .map((sc) => ({ sc, hc: challenge.find((l) => l.id === `HC ${sc.id}`) ?? null }));
+  if (families.length === 0) throw new TradeError('No current league found in the trade API response.');
+  return families;
 }
 
-export function leagueFor(pair: LeaguePair, mode: LeagueMode): TradeLeague {
-  return mode === 'hc' ? (pair.hc ?? pair.sc) : pair.sc;
+/** The stored league id's family, or the newest league when it has ended. */
+export function familyFor(families: LeagueFamily[], id: string | null): LeagueFamily {
+  return families.find((f) => f.sc.id === id) ?? families[0];
+}
+
+export function leagueFor(family: LeagueFamily, mode: LeagueMode): TradeLeague {
+  return mode === 'hc' ? (family.hc ?? family.sc) : family.sc;
 }
 
 export function leagueLabel(league: TradeLeague): string {
   return league.text ?? league.id;
 }
 
-interface CachedPair {
-  pair: LeaguePair;
+interface CachedFamilies {
+  families: LeagueFamily[];
   at: number;
 }
 
 /**
- * The resolved pair, from memory, then the host store, then the API. Small
+ * The resolved families, from memory, then the host store, then the API. Small
  * enough to keep in addon storage, unlike the `/data/*` payloads.
  */
 export async function resolveLeagues(
   client: TradeClient,
   host: AddonHost,
   force = false,
-): Promise<LeaguePair> {
+): Promise<LeagueFamily[]> {
   if (!force) {
     const cached = await readCache(host);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.pair;
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.families;
   }
   try {
     const data = await client.fetchData<{ result: TradeLeague[] }>('/data/leagues', 60 * 60);
-    const pair = classify(data.result ?? []);
-    await host.storage.set(CACHE_KEY, JSON.stringify({ pair, at: Date.now() } satisfies CachedPair));
-    return pair;
+    const families = classify(data.result ?? []);
+    await host.storage.set(CACHE_KEY, JSON.stringify({ families, at: Date.now() } satisfies CachedFamilies));
+    return families;
   } catch (err) {
     // A stale league id still points at a real market; no leagues at all does not.
     const cached = await readCache(host);
-    if (cached) return cached.pair;
+    if (cached) return cached.families;
     throw err;
   }
 }
 
-async function readCache(host: AddonHost): Promise<CachedPair | null> {
+async function readCache(host: AddonHost): Promise<CachedFamilies | null> {
   try {
     const raw = await host.storage.get(CACHE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedPair;
-    return parsed?.pair?.sc?.id ? parsed : null;
+    const parsed = JSON.parse(raw) as CachedFamilies;
+    return parsed?.families?.[0]?.sc?.id ? parsed : null;
   } catch {
     return null;
   }

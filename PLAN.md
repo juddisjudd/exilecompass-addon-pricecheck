@@ -52,42 +52,54 @@ GET https://www.pathofexile.com/api/trade2/data/leagues        -> 200
   {"id":"Hardcore",         "realm":"poe2","text":"Hardcore"}]}
 ```
 
-The endpoint returns every tradeable PoE2 league, in a stable order: current
-softcore challenge, current hardcore challenge, `Standard`, `Hardcore`. The
-hardcore challenge league is always the softcore id prefixed with `HC ` — that
-naming has held since PoE2 launch, and is what both reference tools rely on
-(EE2: `renderer/src/web/background/Leagues.ts`, which notes it uses
+The endpoint returns every tradeable PoE2 league, in a stable order: each
+challenge league's softcore entry followed by its hardcore twin, newest first,
+then `Standard` and `Hardcore`. The hardcore challenge league is always the
+softcore id prefixed with `HC ` — that naming has held since PoE2 launch, and is
+what both reference tools rely on (EE2:
+`renderer/src/web/background/Leagues.ts`, which notes it uses
 `/api/trade2/data/leagues` because `/api/leagues?realm=poe2` is not available).
 
-**Decision:** use exactly the two **current challenge** leagues — softcore and
-hardcore. Softcore and hardcore are different markets, so quoting a hardcore
-player softcore prices is a wrong answer, not a rough one, and `result[0]` alone
-is not acceptable. `Standard` and `Hardcore` are dead-league dumping grounds
-(where characters land when a league ends), not markets anyone price-checks
-against, so they are **filtered out**, not offered.
+**Decision:** use every **challenge** league the endpoint lists, each as a
+softcore/hardcore pair. Softcore and hardcore are different markets, so quoting
+a hardcore player softcore prices is a wrong answer, not a rough one, and
+`result[0]` alone is not acceptable. `Standard` and `Hardcore` are dead-league
+dumping grounds (where characters land when a league ends), not markets anyone
+price-checks against, so they are **filtered out**, not offered.
+
+For most of a league there is exactly one challenge league and this is the same
+set as before. It stops being one at a league start: when Forbidden Rites
+launched on 2026-09-05 the endpoint listed it alongside a still-tradeable Runes
+of Aldur, and someone with characters in the old league is asking about a real
+market, not a dead one.
 
 Classification, without hardcoding any league name:
 
 | Slot | Rule |
 |---|---|
-| softcore (default) | `result[0]`, after filtering to `realm === "poe2"` |
-| hardcore | the entry whose `id` equals `` `HC ${softcore.id}` ``; fall back to the first `id` starting with `HC ` that is not `Hardcore` |
+| families | every `realm === "poe2"` entry whose `id` does not start with `HC `, in response order — newest first |
+| hardcore | per family, the entry whose `id` equals `` `HC ${softcore.id}` ``; `null` when absent |
 | excluded | `id === "Standard"` and `id === "Hardcore"` — never selectable |
 
 Rules:
 
-- Cache the resolved pair for 1 h; refresh in the background.
-- Persist the **mode** (`"sc" | "hc"`) in `settings.v1`, not the league id — the
-  id changes every league, the mode does not, so the choice survives a rollover
-  with no migration and no stale-id fallback path.
-- Resolve mode -> league id at request time, from the cached list.
+- Cache the resolved families for 1 h; refresh in the background.
+- Persist the **mode** (`"sc" | "hc"`) in `settings.v2`, not a league id — the
+  id changes every league, the mode does not.
+- Persist the chosen family as its **softcore id**, defaulting to null. Null and
+  an id no longer in the list both resolve to the newest league, so a rollover
+  still needs no migration and never issues a stale-id request.
+- Resolve family + mode -> league id at request time, from the cached list.
 - If the hardcore entry is missing from a response (never seen, but the `HC `
   convention is a convention), fall back to softcore and say so once in the
   panel rather than searching a league that does not exist.
 
-**UI:** a two-state SC / HC toggle in the panel header, labelled with each
-league's `text`. Two current leagues is the whole selectable set, so this is a
-toggle, not a dropdown, and it is the only league UI the add-on needs.
+**UI:** a two-state SC / HC toggle in the footer, beside a league picker. The
+picker is a dropdown only while more than one challenge league is live —
+otherwise it is the plain league name, since a one-entry dropdown is a control
+that does nothing. Either way it is labelled with the `text` of the league
+actually being searched, hardcore prefix included, so the footer answers "which
+market is this price from" on its own.
 
 **Everything league-scoped must carry the selection, not `result[0]`:**
 

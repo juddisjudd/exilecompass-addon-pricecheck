@@ -245,5 +245,6 @@ export const CSS = `
   .pc-foot { flex:0 0 auto; font-size:10px; color:var(--c-accent);
     display:flex; justify-content:space-between; gap:8px; align-items:center; }
   .pc-foot-league { display:flex; align-items:center; gap:6px; }
+  .pc-league-pick { padding:1px 4px; }
   .pc-limit { font-variant-numeric:tabular-nums; }
 `;

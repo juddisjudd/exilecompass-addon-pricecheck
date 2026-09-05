@@ -3,11 +3,12 @@ import { buildEquipmentFilters, buildStatFilters, type AnyFilterRow } from './st
 import { StatIndex, matchItem, type StatsPayload } from './stats/match';
 import { TradeClient, TradeError } from './trade/client';
 import {
+  familyFor,
   leagueFor,
   leagueLabel,
   resolveLeagues,
+  type LeagueFamily,
   type LeagueMode,
-  type LeaguePair,
 } from './trade/league';
 import {
   abbreviate,
@@ -44,10 +45,16 @@ const LEGACY_SETTINGS_KEY = 'settings.v1';
 
 interface Settings {
   /**
-   * Which of the two current leagues to search. The mode is stored, not a
-   * league id: ids change every league, the choice does not (PLAN.md §2.1).
+   * Softcore or hardcore. The mode is stored, not a league id: ids change
+   * every league, the choice does not (PLAN.md §2.1).
    */
   mode: LeagueMode;
+  /**
+   * Which challenge league, by its softcore id, for the weeks where the
+   * previous one is still live. Null — and an id whose league has since
+   * ended — both mean the newest, so a rollover needs no migration.
+   */
+  league: string | null;
   /**
    * Which listings the API returns. No longer a control: PoE2 sells through
    * in-game asynchronous offers, so whether the seller happens to be logged in
@@ -66,6 +73,7 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   mode: 'sc',
+  league: null,
   status: 'online',
   sort: 'recent',
   core: CORE_CURRENCIES[0],
@@ -74,7 +82,7 @@ const DEFAULT_SETTINGS: Settings = {
 
 interface State {
   settings: Settings;
-  leagues: LeaguePair | null;
+  leagues: LeagueFamily[] | null;
   item: ParsedItem | null;
   rows: AnyFilterRow[];
   unmatched: string[];
@@ -94,6 +102,8 @@ interface State {
   toggled: Set<string>;
   currencies: CurrencyIndex | null;
   rates: Rates | null;
+  /** Which league `rates` were fetched for — they are per-market, not global. */
+  ratesLeague: string | null;
 }
 
 const mount: MountFn = async ({ root, host }) => {
@@ -133,6 +143,7 @@ const mount: MountFn = async ({ root, host }) => {
     toggled: new Set(),
     currencies: null,
     rates: null,
+    ratesLeague: null,
   };
 
   const client = new TradeClient(host, {
@@ -212,7 +223,7 @@ const mount: MountFn = async ({ root, host }) => {
   async function loadLeagues(): Promise<void> {
     try {
       state.leagues = await resolveLeagues(client, host);
-      if (state.settings.mode === 'hc' && !state.leagues.hc) {
+      if (state.settings.mode === 'hc' && !currentFamily()?.hc) {
         state.settings.mode = 'sc';
         state.error = 'No hardcore league in the trade API right now — searching softcore.';
       }
@@ -235,15 +246,23 @@ const mount: MountFn = async ({ root, host }) => {
       }
     }
     const league = currentLeague();
-    if (league && !state.rates) state.rates = await loadRates(host, league);
+    if (league && state.ratesLeague !== league) {
+      state.rates = await loadRates(host, league);
+      state.ratesLeague = league;
+    }
     // A core the economy has no rate for (or a value left by an older
     // version of this add-on) falls back to the first one it does.
     const cores = state.rates?.cores() ?? [];
     if (cores.length && !cores.includes(state.settings.core)) state.settings.core = cores[0];
   }
 
+  function currentFamily(): LeagueFamily | null {
+    return state.leagues ? familyFor(state.leagues, state.settings.league) : null;
+  }
+
   function currentLeague(): string | null {
-    return state.leagues ? leagueFor(state.leagues, state.settings.mode).id : null;
+    const family = currentFamily();
+    return family ? leagueFor(family, state.settings.mode).id : null;
   }
 
   // ── actions ──────────────────────────────────────────────────────────────
@@ -370,9 +389,10 @@ const mount: MountFn = async ({ root, host }) => {
   }
 
   function renderLeagueToggle(): HTMLElement {
+    const family = currentFamily();
     const toggle = el('div', 'pc-toggle');
     (['sc', 'hc'] as LeagueMode[]).forEach((mode) => {
-      const league = state.leagues ? (mode === 'hc' ? state.leagues.hc : state.leagues.sc) : null;
+      const league = family ? (mode === 'hc' ? family.hc : family.sc) : null;
       const button = el('button', state.settings.mode === mode ? 'on' : undefined);
       button.type = 'button';
       button.textContent = mode === 'sc' ? 'SC' : 'HC';
@@ -380,13 +400,45 @@ const mount: MountFn = async ({ root, host }) => {
       button.disabled = !league;
       button.addEventListener('click', () => {
         state.settings.mode = mode;
-        resetResults();
-        void saveSettings();
-        render();
+        onLeagueChanged();
       });
       toggle.append(button);
     });
     return toggle;
+  }
+
+  /**
+   * A picker only while a previous league is still live — for most of a league
+   * there is one market and a one-entry dropdown is a control that does nothing.
+   * Either way it names the league actually being searched, hardcore included,
+   * so the footer still answers "which market is this price from".
+   */
+  function renderLeaguePick(): HTMLElement {
+    const family = currentFamily();
+    const name = (f: LeagueFamily) => leagueLabel(leagueFor(f, state.settings.mode));
+    if (!state.leagues || state.leagues.length < 2) {
+      return el('span', undefined, family ? name(family) : 'Resolving league…');
+    }
+    const select = el('select', 'pc-league-pick');
+    for (const option of state.leagues) {
+      const opt = el('option', undefined, name(option));
+      opt.value = option.sc.id;
+      opt.selected = option.sc.id === family?.sc.id;
+      select.append(opt);
+    }
+    select.addEventListener('change', () => {
+      state.settings.league = select.value;
+      onLeagueChanged();
+    });
+    return select;
+  }
+
+  /** Results and rates both belong to the league that produced them. */
+  function onLeagueChanged(): void {
+    resetResults();
+    void saveSettings();
+    void loadCurrencyData().then(render);
+    render();
   }
 
   // Search sits directly under the filters it acts on, with the core currency
@@ -507,15 +559,13 @@ const mount: MountFn = async ({ root, host }) => {
 
   function renderFoot(): void {
     foot.replaceChildren();
-    const league = state.leagues ? leagueFor(state.leagues, state.settings.mode) : null;
+    const family = currentFamily();
+    const league = family ? leagueFor(family, state.settings.mode) : null;
 
     // The switch belongs beside the league it switches, and the footer is
     // already where the panel says which league it is searching.
     const where = el('div', 'pc-foot-league');
-    where.append(
-      renderLeagueToggle(),
-      el('span', undefined, league ? leagueLabel(league) : 'Resolving league…'),
-    );
+    where.append(renderLeagueToggle(), renderLeaguePick());
     foot.append(where);
 
     const limit = client.limiter.describe(SEARCH_POLICY);
